@@ -93,36 +93,39 @@ function WeekViewInner({
 
             return (
               <View key={dateStr} style={[styles.dayColumn, today && styles.dayColumnToday]}>
-                {events.length === 0 ? (
-                  <TouchableOpacity
-                    style={styles.emptyCell}
-                    onPress={() => onDayPress(dateStr)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.addHint}>+</Text>
-                  </TouchableOpacity>
-                ) : (
-                  events.map((ev) => (
-                    <TouchableOpacity
-                      key={ev.id}
-                      style={[styles.eventCard, { borderLeftColor: ev.color }]}
-                      onPress={() => onEventPress(ev)}
-                      activeOpacity={0.6}
-                    >
-                      {ev.time ? (
-                        <Text style={styles.eventTime} numberOfLines={1}>
-                          {ev.time}
-                        </Text>
-                      ) : null}
-                      <Text
-                        style={[styles.eventTitle, ev.completed && styles.eventCompleted]}
-                        numberOfLines={4}
+                {/* 整列可点击：点击事件区域空白处添加事件；事件卡片仍优先响应打开详情 */}
+                <TouchableOpacity
+                  style={styles.dayColumnTouchable}
+                  onPress={() => onDayPress(dateStr)}
+                  activeOpacity={0.7}
+                >
+                  {events.length === 0 ? (
+                    <View style={styles.emptyCell}>
+                      <Text style={styles.addHint}>+</Text>
+                    </View>
+                  ) : (
+                    events.map((ev) => (
+                      <TouchableOpacity
+                        key={ev.id}
+                        style={[styles.eventCard, { borderLeftColor: ev.color }]}
+                        onPress={() => onEventPress(ev)}
+                        activeOpacity={0.6}
                       >
-                        {ev.title}
-                      </Text>
-                    </TouchableOpacity>
-                  ))
-                )}
+                        {ev.time ? (
+                          <Text style={styles.eventTime} numberOfLines={1}>
+                            {ev.time}
+                          </Text>
+                        ) : null}
+                        <Text
+                          style={[styles.eventTitle, ev.completed && styles.eventCompleted]}
+                          numberOfLines={4}
+                        >
+                          {ev.title}
+                        </Text>
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </TouchableOpacity>
               </View>
             );
           })}
@@ -224,6 +227,9 @@ const styles = StyleSheet.create({
   },
   dayColumnToday: {
     backgroundColor: 'rgba(74, 144, 217, 0.04)',
+  },
+  dayColumnTouchable: {
+    flex: 1,
   },
   emptyCell: {
     flex: 1,

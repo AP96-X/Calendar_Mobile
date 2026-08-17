@@ -21,6 +21,7 @@ import { profileApi } from '../api/profile';
 import { eventsApi } from '../api/events';
 import { getCookie } from '../api/client';
 import { siteApi } from '../api/site';
+import { passwordStrengthError } from '../utils/password';
 import { colors } from '../theme/colors';
 import { spacing, fontSize, radius } from '../theme/spacing';
 import dayjs from 'dayjs';
@@ -124,8 +125,9 @@ export default function SettingsScreen() {
       Alert.alert('提示', '请输入旧密码和新密码');
       return;
     }
-    if (newPassword.length < 6) {
-      Alert.alert('提示', '新密码至少6位');
+    const pwdError = passwordStrengthError(newPassword);
+    if (pwdError) {
+      Alert.alert('提示', pwdError);
       return;
     }
     setChangingPassword(true);
@@ -385,7 +387,7 @@ export default function SettingsScreen() {
                 style={styles.input}
               />
               <TextInput
-                label="新密码（至少6位）"
+                label="新密码（≥8位，含大写/小写/数字/特殊字符至少3类）"
                 value={newPassword}
                 onChangeText={setNewPassword}
                 mode="outlined"
