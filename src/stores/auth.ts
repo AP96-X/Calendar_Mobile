@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { authApi } from '../api/auth';
 import { clearCookie, setUnauthorizedCallback } from '../api/client';
+import { clearAllCache } from '../utils/cache';
 import type { UserInfo, LoginParams } from '../types';
 
 interface AuthState {
@@ -36,6 +37,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
             display_name: data.display_name,
             role: data.role,
           };
+          // 缓存 key 未按用户隔离，登录后（可能是另一个账号）清空日历缓存，避免读到上一个用户的数据
+          await clearAllCache();
           set({ user, isAuthenticated: true });
           return { success: true };
         }
@@ -54,6 +57,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         // ignore network errors during logout
       }
       await clearCookie();
+      await clearAllCache();
       set({ user: null, isAuthenticated: false });
     },
 
@@ -61,6 +65,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
       try {
         const info = await authApi.getStatus();
         if (info.logged_in) {
+          // 若切换了账号，清空上一账号的日历缓存
+          if (get().user?.user_id !== info.user_id) {
+            await clearAllCache();
+          }
           set({ user: info, isAuthenticated: true, isLoading: false });
         } else {
           set({ user: null, isAuthenticated: false, isLoading: false });

@@ -384,8 +384,12 @@ export default function CalendarScreen() {
   }, [fetchEvents]);
 
   const handleAddEvent = useCallback(() => {
+    // 月视图没有“选中某天”的概念：若正在浏览当月则默认添加到今天；
+    // 浏览其它月份时加到该月 1 号，避免用“今天”的日号拼出非法日期（如 02-31）。
     const date = viewMode === 'month'
-      ? `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(now.date()).padStart(2, '0')}`
+      ? (now.year() === currentYear && now.month() + 1 === currentMonth
+          ? getTodayStr()
+          : `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`)
       : selectedDate;
     handleDayPress(date);
   }, [viewMode, currentYear, currentMonth, selectedDate, now, handleDayPress]);

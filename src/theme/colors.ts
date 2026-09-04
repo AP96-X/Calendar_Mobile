@@ -33,12 +33,6 @@ export const colors = {
   workday: '#F39C12',
   festival: '#E67E22',
   solarTerm: '#8E44AD',
-
-  // Event colors
-  eventColors: [
-    '#4A90D9', '#27AE60', '#E74C3C', '#F39C12', '#8E44AD',
-    '#1ABC9C', '#E67E22', '#2C3E50', '#E91E63', '#00BCD4',
-  ],
 } as const;
 
 export type ColorKey = keyof typeof colors;

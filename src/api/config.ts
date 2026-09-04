@@ -59,11 +59,6 @@ export async function setApiBaseUrl(url: string): Promise<void> {
   }
 }
 
-/** Clear the stored API base URL */
-export async function clearApiBaseUrl(): Promise<void> {
-  await AsyncStorage.removeItem(API_URL_KEY);
-}
-
 /**
  * Test connectivity to the given API URL.
  * Returns { ok: boolean; message: string }
@@ -94,12 +89,4 @@ export async function testConnection(url: string): Promise<{ ok: boolean; messag
     }
     return { ok: false, message: '连接失败，请检查地址' };
   }
-}
-
-/** Build a full URL from a path, using the stored API base URL */
-export async function getFullUrl(path: string): Promise<string> {
-  const baseUrl = await getApiBaseUrl();
-  if (!baseUrl) return path;
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return `${baseUrl}${cleanPath}`;
 }
