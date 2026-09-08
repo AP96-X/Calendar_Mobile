@@ -51,7 +51,7 @@ function DayViewInner({
 
   const renderEvent = ({ item: ev }: { item: CalendarEvent }) => (
     <TouchableOpacity
-      style={[styles.eventCard, { borderLeftColor: ev.color }]}
+      style={[styles.eventCard, { backgroundColor: ev.color }]}
       onPress={() => onEventPress(ev)}
       activeOpacity={0.7}
     >
@@ -63,11 +63,9 @@ function DayViewInner({
         <MaterialCommunityIcons
           name={ev.completed ? 'checkbox-marked' : 'checkbox-blank-outline'}
           size={22}
-          color={ev.completed ? colors.success : colors.textMuted}
+          color="rgba(255,255,255,0.9)"
         />
       </TouchableOpacity>
-
-      <View style={[styles.colorBar, { backgroundColor: ev.color }]} />
 
       <View style={styles.eventInfo}>
         <Text
@@ -78,7 +76,7 @@ function DayViewInner({
         </Text>
         {ev.time ? (
           <View style={styles.timeRow}>
-            <MaterialCommunityIcons name="clock-outline" size={13} color={colors.textSecondary} />
+            <MaterialCommunityIcons name="clock-outline" size={13} color="rgba(255,255,255,0.85)" />
             <Text style={styles.eventTime}>{ev.time}</Text>
           </View>
         ) : null}
@@ -90,14 +88,14 @@ function DayViewInner({
           style={styles.iconBtn}
           hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
         >
-          <MaterialCommunityIcons name="pencil" size={18} color={colors.primary} />
+          <MaterialCommunityIcons name="pencil" size={18} color="rgba(255,255,255,0.9)" />
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => handleDelete(ev)}
           style={styles.iconBtn}
           hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
         >
-          <MaterialCommunityIcons name="delete-outline" size={18} color={colors.danger} />
+          <MaterialCommunityIcons name="delete-outline" size={18} color="rgba(255,255,255,0.9)" />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -138,6 +136,7 @@ function DayViewInner({
         </View>
       ) : (
         <FlatList
+          style={styles.listStyle}
           data={events}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderEvent}
@@ -189,6 +188,9 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: '500',
   },
+  listStyle: {
+    flex: 1,
+  },
   list: {
     padding: spacing.md,
     gap: spacing.sm,
@@ -198,7 +200,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.bg,
     borderRadius: radius.md,
-    borderLeftWidth: 4,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
     gap: spacing.sm,
@@ -207,11 +208,6 @@ const styles = StyleSheet.create({
   checkboxWrap: {
     padding: spacing.xs,
   },
-  colorBar: {
-    width: 4,
-    height: 36,
-    borderRadius: 2,
-  },
   eventInfo: {
     flex: 1,
     minWidth: 0,
@@ -219,7 +215,7 @@ const styles = StyleSheet.create({
   eventTitle: {
     fontSize: fontSize.md,
     fontWeight: '500',
-    color: colors.text,
+    color: '#FFFFFF',
   },
   eventCompleted: {
     textDecorationLine: 'line-through',
@@ -233,7 +229,7 @@ const styles = StyleSheet.create({
   },
   eventTime: {
     fontSize: fontSize.sm,
-    color: colors.textSecondary,
+    color: 'rgba(255,255,255,0.85)',
   },
   eventActions: {
     flexDirection: 'row',

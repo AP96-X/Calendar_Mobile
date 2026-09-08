@@ -107,7 +107,7 @@ function WeekViewInner({
                     events.map((ev) => (
                       <TouchableOpacity
                         key={ev.id}
-                        style={[styles.eventCard, { borderLeftColor: ev.color }]}
+                        style={[styles.eventCard, { backgroundColor: ev.color }]}
                         onPress={() => onEventPress(ev)}
                         activeOpacity={0.6}
                       >
@@ -229,7 +229,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(74, 144, 217, 0.04)',
   },
   dayColumnTouchable: {
-    flex: 1,
+    flexGrow: 1,
+    minHeight: 200,
   },
   emptyCell: {
     flex: 1,
@@ -244,21 +245,20 @@ const styles = StyleSheet.create({
   eventCard: {
     backgroundColor: colors.bgSecondary,
     borderRadius: radius.sm,
-    borderLeftWidth: 2,
     paddingVertical: 3,
-    paddingHorizontal: 2,
+    paddingHorizontal: 3,
     marginBottom: 3,
     minHeight: 20,
   },
   eventTime: {
     fontSize: 8,
-    color: colors.textSecondary,
+    color: 'rgba(255,255,255,0.85)',
     marginBottom: 1,
   },
   eventTitle: {
     fontSize: 9,
     lineHeight: 12,
-    color: colors.text,
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   eventCompleted: {
