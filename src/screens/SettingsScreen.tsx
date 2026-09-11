@@ -465,7 +465,7 @@ export default function SettingsScreen() {
         </View>
 
         {/* App version */}
-        <Text style={styles.versionText}>日历 v1.0.2</Text>
+        <Text style={styles.versionText}>日历 v1.1.0</Text>
         {icpNumber ? (
           <TouchableOpacity
             onPress={() => Linking.openURL('https://beian.miit.gov.cn/')}

@@ -19,10 +19,11 @@ import WeekView from '../components/WeekView';
 import DayView from '../components/DayView';
 import EventDetailSheet from '../components/EventDetailSheet';
 import EventFormSheet from '../components/EventFormSheet';
+import SearchSheet from '../components/SearchSheet';
 import { eventsApi } from '../api/events';
 import { calendarApi } from '../api/calendar';
 import { getTodayStr, getMonthLabel, getWeekLabel, getDayLabel, getWeekDates, getISOWeekNumber } from '../utils/calendar';
-import type { EventsByDate, CalendarMeta, CalendarEvent } from '../types';
+import type { EventsByDate, CalendarMeta, CalendarEvent, EventUpdateScope } from '../types';
 import { colors } from '../theme/colors';
 import { spacing, fontSize, radius } from '../theme/spacing';
 
@@ -55,6 +56,9 @@ export default function CalendarScreen() {
   // Event detail sheet state
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailEvent, setDetailEvent] = useState<CalendarEvent | null>(null);
+
+  // Search / filter sheet state
+  const [searchVisible, setSearchVisible] = useState(false);
 
   // ===== 三页分页 ScrollView =====
   const [pageWidth, setPageWidth] = useState(Dimensions.get('window').width);
@@ -419,14 +423,29 @@ export default function CalendarScreen() {
     }
   }, [fetchEvents]);
 
-  const handleEventDelete = useCallback(async (eventId: number) => {
+  const handleEventDelete = useCallback(async (eventId: number, scope: EventUpdateScope = 'single') => {
     try {
-      await eventsApi.delete(eventId);
+      await eventsApi.delete(eventId, scope);
       await fetchEvents();
     } catch {
       // handled by interceptor
     }
   }, [fetchEvents]);
+
+  // ===== 搜索结果跳转：定位到该事件日期并打开详情 =====
+  const handleSearchJump = useCallback((event: CalendarEvent) => {
+    const d = dayjs(event.date);
+    setSelectedDate(event.date);
+    if (viewMode === 'month') {
+      setCurrentYear(d.year());
+      setCurrentMonth(d.month() + 1);
+    }
+    setDisplayedPageIndex(1);
+    displayedPageRef.current = 1;
+    setScrollKey((k) => k + 1);
+    setDetailEvent(event);
+    setDetailVisible(true);
+  }, [viewMode]);
 
   const handleAddEvent = useCallback(() => {
     // 月视图没有“选中某天”的概念：若正在浏览当月则默认添加到今天；
@@ -519,6 +538,14 @@ export default function CalendarScreen() {
         </View>
 
         <View style={styles.headerRight}>
+          <TouchableOpacity
+            onPress={() => setSearchVisible(true)}
+            style={styles.navButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="搜索事件"
+          >
+            <MaterialCommunityIcons name="magnify" size={22} color={colors.text} />
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={handleRefresh}
             disabled={refreshing}
@@ -623,6 +650,14 @@ export default function CalendarScreen() {
         defaultDate={formDefaultDate}
         onClose={() => setFormVisible(false)}
         onSaved={fetchEvents}
+      />
+
+      {/* Search / Filter Sheet */}
+      <SearchSheet
+        visible={searchVisible}
+        onClose={() => setSearchVisible(false)}
+        onJump={handleSearchJump}
+        onToggle={handleEventToggle}
       />
     </SafeAreaView>
   );

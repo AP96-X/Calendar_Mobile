@@ -12,9 +12,13 @@
 ### 日历核心
 
 - **月/周/日三视图** — 底部标签切换，支持前后翻页、回到今天
+- **日视图 24 小时时间轴** — 事件按开始时间定位、方块高度对应时长，全天/未设置时间事件置顶，含当前时间红线与自动滚动到首个事件
 - **农历 + 二十四节气** — 后端天文计算，移动端展示
 - **法定节假日 & 调休** — 假期与补班自动标注
 - **事件管理** — 创建、编辑、删除、标记完成、颜色标记
+- **事件备注 / 时间范围 / 全天** — 支持多行备注、开始-结束时间，全天事件在日视图置顶
+- **重复事件** — 每天 / 每周 / 每月 / 每年重复，支持「仅此事件 / 整个系列」增删改，重复事件以 🔄 标识
+- **搜索 / 筛选** — 按关键字（标题或备注）、日期范围、颜色、完成状态组合查询，结果可一键跳转或直接勾选完成
 - **事件详情** — 底部抽屉展示详情，支持编辑/删除/标记完成
 - **Excel 导入导出** — 导入事件文件、按月或全部导出日历（含事件颜色与删除线）
 
@@ -72,9 +76,10 @@ calendar-mobile/
     │   ├── DayCell.tsx            # 月视图日期单元格
     │   ├── MonthView.tsx          # 月视图
     │   ├── WeekView.tsx           # 周视图（横向滚动）
-    │   ├── DayView.tsx            # 日视图（事件列表）
-    │   ├── EventFormSheet.tsx     # 事件新增/编辑底部表单
-    │   └── EventDetailSheet.tsx   # 事件详情底部抽屉
+    │   ├── DayView.tsx            # 日视图（24 小时时间轴，全天置顶）
+    │   ├── EventFormSheet.tsx     # 事件新增/编辑底部表单（备注/时间范围/全天/重复）
+    │   ├── EventDetailSheet.tsx   # 事件详情底部抽屉
+    │   └── SearchSheet.tsx        # 搜索 / 筛选底部面板
     │
     ├── navigation/                # 导航配置
     │   ├── AppNavigator.tsx       # 根导航（登录/主界面切换）
@@ -149,7 +154,7 @@ npx expo start
 |------|------|
 | 月视图 | 点击日期切换日视图，点击事件打开详情，点击「更多」跳转日视图 |
 | 周视图 | 横向滚动查看一周，点击日期头部切换日视图，点击事件打开详情 |
-| 日视图 | 事件列表展示，点击事件编辑/删除，底部添加按钮创建事件 |
+| 日视图 | 24 小时时间轴展示，事件按开始时间定位、高度对应时长，全天事件置顶，含当前时间线；点击事件打开详情，可添加/编辑/删除 |
 
 ### 事件管理
 
@@ -173,11 +178,12 @@ npx expo start
 | `/api/auth/login` | POST | 登录 |
 | `/api/auth/logout` | POST | 退出 |
 | `/api/auth/status` | GET | 登录状态 |
-| `/api/events` | GET/POST | 查询/创建事件 |
-| `/api/events/<id>` | PUT/DELETE | 更新/删除事件 |
+| `/api/events` | GET/POST | 查询/创建事件（支持 description / end_time / all_day / recurrence 等字段） |
+| `/api/events/<id>` | PUT/DELETE | 更新/删除事件（`scope=single\|series` 指定重复系列范围） |
 | `/api/events/<id>/toggle` | POST | 切换完成状态 |
 | `/api/events/day` | GET | 某天事件 |
 | `/api/events/week` | GET | 某周事件 |
+| `/api/events/search` | GET | 搜索/筛选（q / start / end / color / completed / limit） |
 | `/api/events/export` | GET | 导出 Excel（支持 year/month 参数和 all=1 全部导出） |
 | `/api/events/import` | POST | 从 Excel 导入 |
 | `/api/calendar-meta` | GET | 日历元数据 |

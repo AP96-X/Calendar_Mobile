@@ -1,5 +1,6 @@
 import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { EventsByDate, CalendarMeta, CalendarEvent } from '../types';
 import { getWeekDates, isToday, getLunarDisplay, getDayBadges, type DayBadge } from '../utils/calendar';
 import { colors } from '../theme/colors';
@@ -111,14 +112,22 @@ function WeekViewInner({
                         onPress={() => onEventPress(ev)}
                         activeOpacity={0.6}
                       >
-                        {ev.time ? (
-                          <Text style={styles.eventTime} numberOfLines={1}>
-                            {ev.time}
+                        <View style={styles.eventTitleRow}>
+                          {ev.recurrence ? (
+                            <MaterialCommunityIcons
+                              name="sync"
+                              size={9}
+                              color="rgba(255,255,255,0.95)"
+                              style={styles.recurrenceIcon}
+                            />
+                          ) : null}
+                          <Text
+                            style={[styles.eventTitle, ev.completed && styles.eventCompleted]}
+                            numberOfLines={4}
+                          >
+                            {ev.title}
                           </Text>
-                        ) : null}
-                        <Text style={[styles.eventTitle, ev.completed && styles.eventCompleted]}>
-                          {ev.title}
-                        </Text>
+                        </View>
                       </TouchableOpacity>
                     ))
                   )}
@@ -247,16 +256,19 @@ const styles = StyleSheet.create({
     marginBottom: 3,
     minHeight: 20,
   },
-  eventTime: {
-    fontSize: 8,
-    color: 'rgba(255,255,255,0.85)',
-    marginBottom: 1,
+  eventTitleRow: {    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 2,
+  },
+  recurrenceIcon: {
+    marginTop: 1,
   },
   eventTitle: {
     fontSize: 9,
     lineHeight: 12,
     color: '#FFFFFF',
     fontWeight: '500',
+    flex: 1,
   },
   eventCompleted: {
     textDecorationLine: 'line-through',

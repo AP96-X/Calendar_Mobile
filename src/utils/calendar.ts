@@ -1,10 +1,52 @@
 import dayjs from 'dayjs';
+import type { RecurrenceRule } from '../types';
 
 // Event color palette (matches original app)
 export const EVENT_COLORS = [
   '#4A90D9', '#27AE60', '#E74C3C', '#F39C12', '#8E44AD',
   '#1ABC9C', '#E67E22', '#2C3E50', '#E91E63', '#00BCD4',
 ];
+
+/** 重复规则显示文案 */
+export const RECURRENCE_LABELS: Record<string, string> = {
+  daily: '每天',
+  weekly: '每周',
+  monthly: '每月',
+  yearly: '每年',
+};
+
+/** 重复规则选项（用于表单选择） */
+export const RECURRENCE_OPTIONS: { label: string; value: RecurrenceRule }[] = [
+  { label: '不重复', value: '' },
+  { label: '每天', value: 'daily' },
+  { label: '每周', value: 'weekly' },
+  { label: '每月', value: 'monthly' },
+  { label: '每年', value: 'yearly' },
+];
+
+/** 重复规则中文名 */
+export function getRecurrenceLabel(rule?: string | null): string {
+  if (!rule) return '';
+  return RECURRENCE_LABELS[rule] || rule;
+}
+
+/** 事件时间显示：全天 / HH:MM-HH:MM / HH:MM / 空串 */
+export function formatEventTime(ev: {
+  all_day?: boolean;
+  time?: string | null;
+  end_time?: string | null;
+}): string {
+  if (ev.all_day) return '全天';
+  const start = ev.time || '';
+  const end = ev.end_time || '';
+  if (start && end) return `${start}-${end}`;
+  return start || '';
+}
+
+/** 校验 HH:MM 时间格式 */
+export function isValidTime(value: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value.trim());
+}
 
 // Lunar festivals list (from original app)
 const LUNAR_FESTIVALS = ['春节', '元宵节', '端午节', '七夕', '中元节', '中秋节', '重阳节', '腊八节', '除夕'];

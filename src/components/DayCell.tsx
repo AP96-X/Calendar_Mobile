@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { CalendarEvent, DayMeta } from '../types';
 import { isToday, getLunarDisplay, getDayBadges, type DayBadge } from '../utils/calendar';
 import { colors } from '../theme/colors';
@@ -117,11 +118,20 @@ function DayCellInner({
             onPress={() => onEventPress(ev)}
             activeOpacity={0.6}
           >
-            <View style={[styles.eventDot, ev.completed && styles.eventDotCompleted]} />
+            {ev.recurrence ? (
+              <MaterialCommunityIcons
+                name="sync"
+                size={9}
+                color="rgba(255,255,255,0.95)"
+                style={styles.eventRecurrence}
+              />
+            ) : (
+              <View style={[styles.eventDot, ev.completed && styles.eventDotCompleted]} />
+            )}
             <Text
               style={[styles.eventText, ev.completed && styles.eventTextCompleted]}
+              numberOfLines={1}
             >
-              {ev.time ? `${ev.time} ` : ''}
               {ev.title}
             </Text>
           </TouchableOpacity>
@@ -226,6 +236,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.9)',
     marginRight: 2,
     marginTop: 2,
+  },
+  eventRecurrence: {
+    marginRight: 2,
+    marginTop: 1,
   },
   eventDotCompleted: {
     backgroundColor: 'rgba(255,255,255,0.4)',

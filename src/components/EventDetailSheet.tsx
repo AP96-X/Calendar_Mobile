@@ -6,10 +6,12 @@ import {
   Modal,
   TouchableOpacity,
   TouchableWithoutFeedback,
+  Alert,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
-import type { CalendarEvent } from '../types';
+import type { CalendarEvent, EventUpdateScope } from '../types';
+import { formatEventTime, getRecurrenceLabel } from '../utils/calendar';
 import { colors } from '../theme/colors';
 import { spacing, fontSize, radius } from '../theme/spacing';
 
@@ -18,7 +20,7 @@ interface EventDetailSheetProps {
   event: CalendarEvent | null;
   onClose: () => void;
   onEdit: (event: CalendarEvent) => void;
-  onDelete: (eventId: number) => void;
+  onDelete: (eventId: number, scope?: EventUpdateScope) => void;
   onToggleComplete: (eventId: number) => void;
 }
 
@@ -36,10 +38,45 @@ export default function EventDetailSheet({
 
   const eventDate = dayjs(event.date);
   const weekdayStr = `星期${WEEKDAY_NAMES[eventDate.day()]}`;
+  const isSeries = !!event.recurrence_group;
 
   const handleDelete = () => {
-    onClose();
-    onDelete(event.id);
+    if (isSeries) {
+      Alert.alert(
+        '删除重复事件',
+        `「${event.title}」属于重复系列，请选择删除范围`,
+        [
+          { text: '取消', style: 'cancel' },
+          {
+            text: '仅此事件',
+            onPress: () => {
+              onDelete(event.id, 'single');
+              onClose();
+            },
+          },
+          {
+            text: '整个系列',
+            style: 'destructive',
+            onPress: () => {
+              onDelete(event.id, 'series');
+              onClose();
+            },
+          },
+        ]
+      );
+      return;
+    }
+    Alert.alert('确认删除', `确定要删除事件"${event.title}"吗？`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => {
+          onDelete(event.id, 'single');
+          onClose();
+        },
+      },
+    ]);
   };
 
   const handleToggleComplete = () => {
@@ -51,6 +88,8 @@ export default function EventDetailSheet({
     onClose();
     onEdit(event);
   };
+
+  const timeText = formatEventTime(event);
 
   return (
     <Modal
@@ -78,6 +117,9 @@ export default function EventDetailSheet({
                 >
                   {event.title}
                 </Text>
+                {event.recurrence ? (
+                  <MaterialCommunityIcons name="sync" size={18} color={colors.primary} />
+                ) : null}
               </View>
 
               {/* Status badge */}
@@ -107,8 +149,27 @@ export default function EventDetailSheet({
                 <View style={styles.detailRow}>
                   <MaterialCommunityIcons name="clock-outline" size={18} color={colors.textSecondary} />
                   <Text style={styles.detailLabel}>时间</Text>
-                  <Text style={styles.detailValue}>{event.time || '全天'}</Text>
+                  <Text style={styles.detailValue}>{timeText || '未设置'}</Text>
                 </View>
+
+                {event.recurrence ? (
+                  <View style={styles.detailRow}>
+                    <MaterialCommunityIcons name="sync" size={18} color={colors.textSecondary} />
+                    <Text style={styles.detailLabel}>重复</Text>
+                    <Text style={styles.detailValue}>
+                      {getRecurrenceLabel(event.recurrence)}
+                      {event.recurrence_end ? `，至 ${event.recurrence_end}` : ''}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {event.description ? (
+                  <View style={[styles.detailRow, styles.detailRowTop]}>
+                    <MaterialCommunityIcons name="text-box-outline" size={18} color={colors.textSecondary} />
+                    <Text style={styles.detailLabel}>备注</Text>
+                    <Text style={styles.detailValue}>{event.description}</Text>
+                  </View>
+                ) : null}
 
                 <View style={styles.detailRow}>
                   <View style={[styles.colorDot, { backgroundColor: event.color }]} />
@@ -237,6 +298,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  detailRowTop: {
+    alignItems: 'flex-start',
   },
   detailLabel: {
     fontSize: fontSize.sm,

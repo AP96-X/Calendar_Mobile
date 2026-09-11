@@ -1,5 +1,12 @@
 import client from './client';
-import type { CalendarEvent, EventInput, EventsByDate, ApiResponse } from '../types';
+import type {
+  CalendarEvent,
+  EventInput,
+  EventUpdateScope,
+  EventSearchParams,
+  EventsByDate,
+  ApiResponse,
+} from '../types';
 import { fetchWithCache } from '../utils/cache';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -88,10 +95,10 @@ export const eventsApi = {
     );
   },
 
-  update(id: number, data: Partial<EventInput>): Promise<ApiResponse> {
+  update(id: number, data: Partial<EventInput>, scope: EventUpdateScope = 'single'): Promise<ApiResponse> {
     // 日期可能变更，无法确定旧日期对应的缓存 key，统一清空事件缓存
     return clearAllEventCache().then(() =>
-      client.put(`/api/events/${id}`, data).then((r) => r.data)
+      client.put(`/api/events/${id}`, { ...data, scope }).then((r) => r.data)
     );
   },
 
@@ -102,11 +109,16 @@ export const eventsApi = {
     );
   },
 
-  delete(id: number): Promise<ApiResponse> {
+  delete(id: number, scope: EventUpdateScope = 'single'): Promise<ApiResponse> {
     // 不确定事件属于哪天，统一清空事件缓存
     return clearAllEventCache().then(() =>
-      client.delete(`/api/events/${id}`).then((r) => r.data)
+      client.delete(`/api/events/${id}`, { params: { scope } }).then((r) => r.data)
     );
+  },
+
+  /** 搜索 / 筛选事件（不走缓存，始终查询服务端最新数据） */
+  search(params: EventSearchParams): Promise<CalendarEvent[]> {
+    return client.get<CalendarEvent[]>('/api/events/search', { params }).then((r) => r.data);
   },
 
   /** Import events from an Excel file (uses expo-document-picker result) */

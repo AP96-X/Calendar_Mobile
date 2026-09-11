@@ -8,15 +8,22 @@ import {
   TouchableWithoutFeedback,
   ScrollView,
   Alert,
+  Switch,
   KeyboardAvoidingView,
   Platform,
+  type KeyboardTypeOptions,
 } from 'react-native';
 import { TextInput, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import { eventsApi } from '../api/events';
-import { EVENT_COLORS } from '../utils/calendar';
-import type { CalendarEvent, EventInput } from '../types';
+import {
+  EVENT_COLORS,
+  RECURRENCE_OPTIONS,
+  getRecurrenceLabel,
+  isValidTime,
+} from '../utils/calendar';
+import type { CalendarEvent, EventInput, EventUpdateScope, RecurrenceRule } from '../types';
 import { colors } from '../theme/colors';
 import { spacing, fontSize, radius } from '../theme/spacing';
 
@@ -29,6 +36,15 @@ interface EventFormSheetProps {
   onSaved: () => void;
 }
 
+const SCOPE_OPTIONS: { label: string; value: EventUpdateScope }[] = [
+  { label: '仅此事件', value: 'single' },
+  { label: '整个系列', value: 'series' },
+];
+
+/** Android 数字键盘不含冒号，时间输入用默认键盘；iOS 用数字+标点 */
+const TIME_KEYBOARD: KeyboardTypeOptions =
+  Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default';
+
 export default function EventFormSheet({
   visible,
   mode,
@@ -39,28 +55,84 @@ export default function EventFormSheet({
 }: EventFormSheetProps) {
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(defaultDate);
-  const [time, setTime] = useState('');
+  const [allDay, setAllDay] = useState(false);
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [description, setDescription] = useState('');
+  const [recurrence, setRecurrence] = useState<RecurrenceRule>('');
+  const [recurrenceHasEnd, setRecurrenceHasEnd] = useState(false);
+  const [recurrenceEnd, setRecurrenceEnd] = useState('');
+  const [scope, setScope] = useState<EventUpdateScope>('single');
   const [selectedColor, setSelectedColor] = useState(EVENT_COLORS[0]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const isSeries = mode === 'edit' && !!event?.recurrence_group;
+
   // Reset form when sheet opens
   useEffect(() => {
-    if (visible) {
-      if (mode === 'edit' && event) {
-        setTitle(event.title);
-        setDate(event.date);
-        setTime(event.time || '');
-        setSelectedColor(event.color);
-      } else {
-        setTitle('');
-        setDate(defaultDate);
-        setTime('');
-        setSelectedColor(EVENT_COLORS[0]);
-      }
-      setError('');
+    if (!visible) return;
+    if (mode === 'edit' && event) {
+      setTitle(event.title);
+      setDate(event.date);
+      setAllDay(!!event.all_day);
+      setStartTime(event.time || '');
+      setEndTime(event.end_time || '');
+      setDescription(event.description || '');
+      setRecurrence((event.recurrence as RecurrenceRule) || '');
+      setRecurrenceEnd(event.recurrence_end || '');
+      setRecurrenceHasEnd(!!event.recurrence_end);
+      setSelectedColor(event.color);
+      setScope('single');
+    } else {
+      setTitle('');
+      setDate(defaultDate);
+      setAllDay(false);
+      setStartTime('');
+      setEndTime('');
+      setDescription('');
+      setRecurrence('');
+      setRecurrenceEnd('');
+      setRecurrenceHasEnd(false);
+      setSelectedColor(EVENT_COLORS[0]);
+      setScope('single');
     }
+    setError('');
   }, [visible, mode, event, defaultDate]);
+
+  const handleAllDayChange = useCallback((checked: boolean) => {
+    setAllDay(checked);
+    if (checked) {
+      setStartTime('');
+      setEndTime('');
+    }
+  }, []);
+
+  const adjustDate = (delta: number) => {
+    setDate(dayjs(date).add(delta, 'day').format('YYYY-MM-DD'));
+  };
+
+  const adjustRecurrenceEnd = (delta: number) => {
+    const base = recurrenceEnd ? dayjs(recurrenceEnd) : dayjs(date).add(90, 'day');
+    setRecurrenceEnd(base.add(delta, 'day').format('YYYY-MM-DD'));
+  };
+
+  const handleRecurrenceChange = (rule: RecurrenceRule) => {
+    setRecurrence(rule);
+    if (!rule) {
+      setRecurrenceHasEnd(false);
+      setRecurrenceEnd('');
+    } else if (recurrenceHasEnd && !recurrenceEnd) {
+      setRecurrenceEnd(dayjs(date).add(90, 'day').format('YYYY-MM-DD'));
+    }
+  };
+
+  const handleRecurrenceEndToggle = (checked: boolean) => {
+    setRecurrenceHasEnd(checked);
+    if (checked && !recurrenceEnd) {
+      setRecurrenceEnd(dayjs(date).add(90, 'day').format('YYYY-MM-DD'));
+    }
+  };
 
   const handleSave = useCallback(async () => {
     if (!title.trim()) {
@@ -72,6 +144,37 @@ export default function EventFormSheet({
       return;
     }
 
+    const trimmedStart = startTime.trim();
+    const trimmedEnd = endTime.trim();
+    if (!allDay) {
+      if (trimmedStart && !isValidTime(trimmedStart)) {
+        setError('开始时间格式应为 HH:MM');
+        return;
+      }
+      if (trimmedEnd && !isValidTime(trimmedEnd)) {
+        setError('结束时间格式应为 HH:MM');
+        return;
+      }
+      if (trimmedEnd && !trimmedStart) {
+        setError('请先填写开始时间');
+        return;
+      }
+      if (trimmedStart && trimmedEnd && trimmedEnd < trimmedStart) {
+        setError('结束时间不能早于开始时间');
+        return;
+      }
+    }
+    if (mode === 'add' && recurrence && recurrenceHasEnd) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(recurrenceEnd)) {
+        setError('请选择重复结束日期');
+        return;
+      }
+      if (recurrenceEnd < date) {
+        setError('重复结束日期不能早于开始日期');
+        return;
+      }
+    }
+
     setError('');
     setSaving(true);
 
@@ -79,34 +182,56 @@ export default function EventFormSheet({
     const hexPattern = /^#[0-9A-Fa-f]{6}$/;
     const finalColor = hexPattern.test(selectedColor) ? selectedColor.toUpperCase() : '#4A90D9';
 
-    const data: EventInput = {
+    const base: EventInput = {
       title: title.trim(),
       date,
-      time: time.trim() || null,
+      all_day: allDay,
+      time: allDay ? null : trimmedStart || null,
+      end_time: allDay ? null : trimmedEnd || null,
+      description: description.trim(),
       color: finalColor,
     };
 
     try {
       if (mode === 'edit' && event) {
-        await eventsApi.update(event.id, data);
+        // 重复规则不支持编辑时变更（如需变更请删除后重建），仅更新共享字段
+        await eventsApi.update(event.id, base, isSeries ? scope : 'single');
+        onSaved();
+        onClose();
       } else {
-        await eventsApi.create(data);
+        const payload: EventInput = { ...base };
+        if (recurrence) {
+          payload.recurrence = recurrence;
+          payload.recurrence_end = recurrenceHasEnd ? recurrenceEnd : '';
+        }
+        const res = await eventsApi.create(payload);
+        onSaved();
+        onClose();
+        const count = typeof res.count === 'number' ? res.count : 1;
+        if (count > 1) {
+          Alert.alert('已创建重复事件', `共生成 ${count} 个实例`);
+        }
       }
-      onSaved();
-      onClose();
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } }; message?: string };
       setError(e.response?.data?.error || e.message || '保存失败');
     } finally {
       setSaving(false);
     }
-  }, [title, date, time, selectedColor, mode, event, onSaved, onClose]);
+  }, [
+    title, date, allDay, startTime, endTime, description, recurrence,
+    recurrenceHasEnd, recurrenceEnd, selectedColor, mode, event, isSeries,
+    scope, onSaved, onClose,
+  ]);
 
   const handleDelete = useCallback(() => {
     if (!event) return;
+    const deleteSeries = isSeries && scope === 'series';
     Alert.alert(
-      '确认删除',
-      `确定要删除事件"${event.title}"吗？`,
+      deleteSeries ? '确认删除整个系列' : '确认删除',
+      deleteSeries
+        ? `确定要删除重复事件"${event.title}"的整个系列吗？`
+        : `确定要删除事件"${event.title}"吗？`,
       [
         { text: '取消', style: 'cancel' },
         {
@@ -115,7 +240,7 @@ export default function EventFormSheet({
           onPress: async () => {
             setSaving(true);
             try {
-              await eventsApi.delete(event.id);
+              await eventsApi.delete(event.id, deleteSeries ? 'series' : 'single');
               onSaved();
               onClose();
             } catch (err: unknown) {
@@ -128,13 +253,7 @@ export default function EventFormSheet({
         },
       ]
     );
-  }, [event, onSaved, onClose]);
-
-  // Simple date increment/decrement
-  const adjustDate = (delta: number) => {
-    const d = dayjs(date).add(delta, 'day');
-    setDate(d.format('YYYY-MM-DD'));
-  };
+  }, [event, isSeries, scope, onSaved, onClose]);
 
   return (
     <Modal
@@ -163,6 +282,34 @@ export default function EventFormSheet({
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
                 >
+                  {/* 重复事件的修改范围（仅系列事件显示） */}
+                  {isSeries ? (
+                    <View style={styles.section}>
+                      <Text style={styles.label}>修改范围</Text>
+                      <View style={styles.chipRow}>
+                        {SCOPE_OPTIONS.map((opt) => {
+                          const active = scope === opt.value;
+                          return (
+                            <TouchableOpacity
+                              key={opt.value}
+                              style={[styles.chip, active && styles.chipActive]}
+                              onPress={() => setScope(opt.value)}
+                            >
+                              <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                                {opt.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                      <Text style={styles.hint}>
+                        {scope === 'series'
+                          ? '将更新该系列全部实例的标题/时间/备注/颜色（各自日期保持不变）'
+                          : '仅更新当前这一天的事件'}
+                      </Text>
+                    </View>
+                  ) : null}
+
                   {/* Title input */}
                   <TextInput
                     label="事件标题"
@@ -191,16 +338,132 @@ export default function EventFormSheet({
                     </TouchableOpacity>
                   </View>
 
-                  {/* Time input */}
+                  {/* All-day switch */}
+                  <View style={styles.switchRow}>
+                    <View style={styles.switchLabelWrap}>
+                      <MaterialCommunityIcons name="weather-sunny" size={18} color={colors.textSecondary} />
+                      <Text style={styles.switchLabel}>全天事件</Text>
+                    </View>
+                    <Switch
+                      value={allDay}
+                      onValueChange={handleAllDayChange}
+                      trackColor={{ true: colors.primary, false: colors.borderDark }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  {/* Time range */}
+                  <Text style={styles.label}>时间范围（可选）</Text>
+                  <View style={styles.timeRow}>
+                    <TextInput
+                      label="开始"
+                      value={startTime}
+                      onChangeText={setStartTime}
+                      mode="outlined"
+                      placeholder="09:30"
+                      style={styles.timeInput}
+                      keyboardType={TIME_KEYBOARD}
+                      disabled={allDay}
+                    />
+                    <Text style={styles.timeSep}>-</Text>
+                    <TextInput
+                      label="结束"
+                      value={endTime}
+                      onChangeText={setEndTime}
+                      mode="outlined"
+                      placeholder="10:30"
+                      style={styles.timeInput}
+                      keyboardType={TIME_KEYBOARD}
+                      disabled={allDay}
+                    />
+                  </View>
+
+                  {/* Description */}
                   <TextInput
-                    label="时间（可选）"
-                    value={time}
-                    onChangeText={setTime}
+                    label="备注（可选）"
+                    value={description}
+                    onChangeText={setDescription}
                     mode="outlined"
-                    placeholder="如 09:30"
+                    placeholder="补充说明、地点、参与人等..."
                     style={styles.input}
-                    keyboardType="numeric"
+                    multiline
+                    numberOfLines={3}
                   />
+
+                  {/* Recurrence (add mode only) */}
+                  {mode === 'add' ? (
+                    <View style={styles.section}>
+                      <Text style={styles.label}>重复</Text>
+                      <View style={styles.chipRow}>
+                        {RECURRENCE_OPTIONS.map((opt) => {
+                          const active = recurrence === opt.value;
+                          return (
+                            <TouchableOpacity
+                              key={opt.value || 'none'}
+                              style={[styles.chip, active && styles.chipActive]}
+                              onPress={() => handleRecurrenceChange(opt.value)}
+                            >
+                              <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                                {opt.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+
+                      {recurrence ? (
+                        <>
+                          <View style={styles.switchRow}>
+                            <Text style={styles.switchLabel}>设置重复结束日期</Text>
+                            <Switch
+                              value={recurrenceHasEnd}
+                              onValueChange={handleRecurrenceEndToggle}
+                              trackColor={{ true: colors.primary, false: colors.borderDark }}
+                              thumbColor="#FFFFFF"
+                            />
+                          </View>
+
+                          {recurrenceHasEnd ? (
+                            <View style={styles.dateRow}>
+                              <TouchableOpacity
+                                onPress={() => adjustRecurrenceEnd(-1)}
+                                style={styles.dateBtn}
+                              >
+                                <MaterialCommunityIcons name="chevron-left" size={24} color={colors.primary} />
+                              </TouchableOpacity>
+                              <Text style={styles.dateText}>
+                                {recurrenceEnd
+                                  ? dayjs(recurrenceEnd).format('YYYY年MM月DD日')
+                                  : '请选择'}
+                              </Text>
+                              <TouchableOpacity
+                                onPress={() => adjustRecurrenceEnd(1)}
+                                style={styles.dateBtn}
+                              >
+                                <MaterialCommunityIcons name="chevron-right" size={24} color={colors.primary} />
+                              </TouchableOpacity>
+                            </View>
+                          ) : null}
+
+                          <Text style={styles.hint}>
+                            将按「{getRecurrenceLabel(recurrence)}」重复生成事件；未设置结束日期时默认重复 90 天（最多 400 个实例）。
+                          </Text>
+                        </>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {/* Edit recurring info */}
+                  {mode === 'edit' && event?.recurrence ? (
+                    <View style={styles.infoBox}>
+                      <MaterialCommunityIcons name="sync" size={16} color={colors.primary} />
+                      <Text style={styles.infoText}>
+                        重复事件：{getRecurrenceLabel(event.recurrence)}
+                        {event.recurrence_end ? `，至 ${event.recurrence_end}` : ''}。
+                        如需更改重复规则，请删除后重新创建。
+                      </Text>
+                    </View>
+                  ) : null}
 
                   {/* Color picker */}
                   <Text style={styles.label}>颜色标签</Text>
@@ -304,7 +567,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.xl,
     padding: spacing.xl,
     paddingBottom: spacing.xxxl,
-    maxHeight: '85%',
+    maxHeight: '88%',
   },
   handle: {
     width: 40,
@@ -327,11 +590,20 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     backgroundColor: colors.bg,
   },
+  section: {
+    marginBottom: spacing.md,
+  },
   label: {
     fontSize: fontSize.sm,
     fontWeight: '600',
     color: colors.textSecondary,
     marginBottom: spacing.sm,
+  },
+  hint: {
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
+    lineHeight: 16,
+    marginTop: spacing.xs,
   },
   dateRow: {
     flexDirection: 'row',
@@ -350,6 +622,82 @@ const styles = StyleSheet.create({
     fontSize: fontSize.lg,
     fontWeight: '600',
     color: colors.text,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.bgSecondary,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
+  },
+  switchLabelWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  switchLabel: {
+    fontSize: fontSize.md,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  timeInput: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  timeSep: {
+    fontSize: fontSize.lg,
+    color: colors.textMuted,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  chip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.round,
+    backgroundColor: colors.bgSecondary,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  chipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  chipText: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  chipTextActive: {
+    color: colors.textInverse,
+    fontWeight: '600',
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#EBF5FF',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  infoText: {
+    fontSize: fontSize.xs,
+    color: colors.primaryDark,
+    flex: 1,
+    lineHeight: 16,
   },
   colorGrid: {
     flexDirection: 'row',
