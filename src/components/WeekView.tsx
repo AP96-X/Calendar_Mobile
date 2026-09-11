@@ -121,10 +121,7 @@ function WeekViewInner({
                               style={styles.recurrenceIcon}
                             />
                           ) : null}
-                          <Text
-                            style={[styles.eventTitle, ev.completed && styles.eventCompleted]}
-                            numberOfLines={4}
-                          >
+                          <Text style={[styles.eventTitle, ev.completed && styles.eventCompleted]}>
                             {ev.title}
                           </Text>
                         </View>
@@ -256,7 +253,8 @@ const styles = StyleSheet.create({
     marginBottom: 3,
     minHeight: 20,
   },
-  eventTitleRow: {    flexDirection: 'row',
+  eventTitleRow: {
+    flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 2,
   },

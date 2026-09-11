@@ -128,10 +128,7 @@ function DayCellInner({
             ) : (
               <View style={[styles.eventDot, ev.completed && styles.eventDotCompleted]} />
             )}
-            <Text
-              style={[styles.eventText, ev.completed && styles.eventTextCompleted]}
-              numberOfLines={1}
-            >
+            <Text style={[styles.eventText, ev.completed && styles.eventTextCompleted]}>
               {ev.title}
             </Text>
           </TouchableOpacity>
