@@ -116,10 +116,7 @@ function WeekViewInner({
                             {ev.time}
                           </Text>
                         ) : null}
-                        <Text
-                          style={[styles.eventTitle, ev.completed && styles.eventCompleted]}
-                          numberOfLines={4}
-                        >
+                        <Text style={[styles.eventTitle, ev.completed && styles.eventCompleted]}>
                           {ev.title}
                         </Text>
                       </TouchableOpacity>

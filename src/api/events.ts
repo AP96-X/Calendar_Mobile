@@ -34,8 +34,12 @@ async function clearAllEventCache(): Promise<void> {
 }
 
 export const eventsApi = {
-  /** 获取月视图事件（带缓存） */
-  getMonthEvents(year: number, month: number): Promise<{ data: EventsByDate; fromCache: boolean }> {
+  /** 获取月视图事件（带缓存；forceRefresh=true 时绕过缓存直接请求服务端） */
+  getMonthEvents(
+    year: number,
+    month: number,
+    forceRefresh = false,
+  ): Promise<{ data: EventsByDate; fromCache: boolean }> {
     const key = `events_month_${year}-${String(month).padStart(2, '0')}`;
     return fetchWithCache(
       key,
@@ -43,11 +47,15 @@ export const eventsApi = {
         .get<CalendarEvent[]>('/api/events', { params: { year, month } })
         .then((r) => toEventsByDate(r.data)),
       EVENTS_TTL,
+      forceRefresh,
     );
   },
 
-  /** 获取周视图事件（带缓存） */
-  getWeekEvents(date: string): Promise<{ data: EventsByDate; fromCache: boolean }> {
+  /** 获取周视图事件（带缓存；forceRefresh=true 时绕过缓存直接请求服务端） */
+  getWeekEvents(
+    date: string,
+    forceRefresh = false,
+  ): Promise<{ data: EventsByDate; fromCache: boolean }> {
     const key = `events_week_${date}`;
     return fetchWithCache(
       key,
@@ -55,16 +63,21 @@ export const eventsApi = {
         .get<CalendarEvent[]>('/api/events/week', { params: { date } })
         .then((r) => toEventsByDate(r.data)),
       EVENTS_TTL,
+      forceRefresh,
     );
   },
 
-  /** 获取日视图事件（带缓存） */
-  getDayEvents(date: string): Promise<{ data: CalendarEvent[]; fromCache: boolean }> {
+  /** 获取日视图事件（带缓存；forceRefresh=true 时绕过缓存直接请求服务端） */
+  getDayEvents(
+    date: string,
+    forceRefresh = false,
+  ): Promise<{ data: CalendarEvent[]; fromCache: boolean }> {
     const key = `events_day_${date}`;
     return fetchWithCache(
       key,
       () => client.get('/api/events/day', { params: { date } }).then((r) => r.data as CalendarEvent[]),
       EVENTS_TTL,
+      forceRefresh,
     );
   },
 

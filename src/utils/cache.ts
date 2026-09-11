@@ -97,16 +97,22 @@ export async function clearAllCache(): Promise<void> {
  * 2. 未命中/已过期 → 发起网络请求，成功则写入缓存并返回
  * 3. 网络请求失败 → 读取缓存（即使已过期，fromCache=true，供 UI 提示离线）
  * 4. 缓存也没有 → 抛出原始错误
+ *
+ * forceRefresh=true 时跳过第 1 步，直接请求服务端（手动刷新场景）；
+ * 请求失败仍会降级到缓存。
  */
 export async function fetchWithCache<T>(
   key: string,
   fetcher: () => Promise<T>,
   ttl: number = DEFAULT_TTL,
+  forceRefresh: boolean = false,
 ): Promise<{ data: T; fromCache: boolean }> {
-  // 1. 缓存未过期直接命中，避免重复网络请求
-  const fresh = await getCache<T>(key);
-  if (fresh !== null) {
-    return { data: fresh, fromCache: false };
+  // 1. 缓存未过期直接命中，避免重复网络请求（手动刷新时跳过）
+  if (!forceRefresh) {
+    const fresh = await getCache<T>(key);
+    if (fresh !== null) {
+      return { data: fresh, fromCache: false };
+    }
   }
 
   try {

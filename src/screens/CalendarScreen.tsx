@@ -7,6 +7,7 @@ import {
   ScrollView,
   Dimensions,
   Animated,
+  Easing,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from 'react-native';
@@ -72,6 +73,37 @@ export default function CalendarScreen() {
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const toastScale = useRef(new Animated.Value(0.8)).current;
+
+  // ===== 手动刷新（绕过缓存重新拉取服务端事件）=====
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshRotate = useRef(new Animated.Value(0)).current;
+  const refreshAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  // 刷新中图标持续旋转，结束/卸载时停止
+  useEffect(() => {
+    if (refreshing) {
+      refreshRotate.setValue(0);
+      const anim = Animated.loop(
+        Animated.timing(refreshRotate, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      refreshAnimRef.current = anim;
+      anim.start();
+    } else {
+      refreshAnimRef.current?.stop();
+      refreshRotate.setValue(0);
+    }
+    return () => refreshAnimRef.current?.stop();
+  }, [refreshing, refreshRotate]);
+
+  const refreshSpin = refreshRotate.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   /** 显示切换提示，1 秒后自动消失 */
   const showToast = useCallback((text: string) => {
@@ -177,19 +209,21 @@ export default function CalendarScreen() {
     setCalendarMeta((prev) => ({ ...prev, ...newMeta }));
   }, [neededMonths]);
 
-  const fetchEvents = useCallback(async () => {
+  /** 拉取三页事件数据。forceRefresh=true 时绕过缓存直连服务端（手动刷新）。
+   *  返回 true 表示拿到的是服务端新鲜数据；false 表示失败或降级为缓存数据。 */
+  const fetchEvents = useCallback(async (forceRefresh = false): Promise<boolean> => {
     try {
       // 并行获取三页事件数据（prev / current / next）
       const results = await Promise.all(
         pageParams.map((p) => {
           if (viewMode === 'month') {
-            return eventsApi.getMonthEvents(p.year!, p.month!);
+            return eventsApi.getMonthEvents(p.year!, p.month!, forceRefresh);
           }
           if (viewMode === 'week') {
-            return eventsApi.getWeekEvents(p.date!);
+            return eventsApi.getWeekEvents(p.date!, forceRefresh);
           }
           // day — 转换为 EventsByDate 格式
-          return eventsApi.getDayEvents(p.date!).then((res) => ({
+          return eventsApi.getDayEvents(p.date!, forceRefresh).then((res) => ({
             data: res.data.length > 0 ? { [p.date!]: res.data } : {},
             fromCache: res.fromCache,
           }));
@@ -206,8 +240,10 @@ export default function CalendarScreen() {
 
       setEventsData((prev) => ({ ...prev, ...newData }));
       setUsingCache(anyFromCache);
+      return !anyFromCache;
     } catch {
       // handled by interceptor
+      return false;
     }
   }, [viewMode, pageParams]);
 
@@ -218,6 +254,15 @@ export default function CalendarScreen() {
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
+
+  // ===== 手动刷新：绕过缓存重新获取当前三页的服务端事件 =====
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    const fresh = await fetchEvents(true);
+    setRefreshing(false);
+    showToast(fresh ? '刷新成功' : '刷新失败，显示缓存数据');
+  }, [refreshing, fetchEvents, showToast]);
 
   // ===== 计算切换提示文本 =====
   const getNavigateToast = useCallback((delta: number): string => {
@@ -473,9 +518,26 @@ export default function CalendarScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity onPress={() => navigate(1)} style={styles.navButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <MaterialCommunityIcons name="chevron-right" size={28} color={colors.text} />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            onPress={handleRefresh}
+            disabled={refreshing}
+            style={styles.navButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="刷新事件"
+          >
+            <Animated.View style={{ transform: [{ rotate: refreshSpin }] }}>
+              <MaterialCommunityIcons
+                name="refresh"
+                size={22}
+                color={refreshing ? colors.primary : colors.text}
+              />
+            </Animated.View>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigate(1)} style={styles.navButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <MaterialCommunityIcons name="chevron-right" size={28} color={colors.text} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* View mode switcher */}
@@ -583,6 +645,10 @@ const styles = StyleSheet.create({
   },
   navButton: {
     padding: spacing.xs,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   headerCenter: {
     flexDirection: 'row',
