@@ -6,9 +6,9 @@ import type {
   EventSearchParams,
   EventsByDate,
   ApiResponse,
+  RecurrenceRule,
 } from '../types';
-import { fetchWithCache, invalidateCache } from '../utils/cache';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fetchWithCache, clearEventCache } from '../utils/cache';
 
 /** Convert a flat event array to a date-keyed map */
 function toEventsByDate(events: CalendarEvent[]): EventsByDate {
@@ -26,21 +26,7 @@ const EVENTS_TTL = 30 * 60 * 1000;
 /** 清除所有事件相关缓存（保留日历元数据缓存）。
  *  缓存策略是“缓存优先”，若增删改后不清缓存，下次读取会命中旧数据，
  *  因此所有变更操作统一清空事件缓存。 */
-async function clearAllEventCache(): Promise<void> {
-  // 先让进行中的请求结果失效，再删除已写入的缓存
-  invalidateCache();
-  try {
-    const keys = await AsyncStorage.getAllKeys();
-    const eventKeys = keys.filter((k) =>
-      k.startsWith('calendar_cache_events_')
-    );
-    if (eventKeys.length > 0) {
-      await AsyncStorage.multiRemove(eventKeys);
-    }
-  } catch {
-    // ignore
-  }
-}
+const clearAllEventCache = clearEventCache;
 
 export const eventsApi = {
   /** 获取月视图事件（带缓存；forceRefresh=true 时绕过缓存直接请求服务端） */
@@ -144,5 +130,47 @@ export const eventsApi = {
   /** 获取当前用户有事件数据的年份列表 */
   getAvailableYears(): Promise<{ years: number[] }> {
     return client.get('/api/events/years').then((r) => r.data);
+  },
+
+  /** 找到重复系列的最早实例日期（用于重建系列时锚定起始日）。
+   *  后端没有「按 recurrence_group 查询」的接口，这里用标题搜索再按 group 过滤兜底。 */
+  async findSeriesStartDate(event: CalendarEvent): Promise<string> {
+    if (!event.recurrence_group) return event.date;
+    try {
+      const list = await eventsApi.search({ q: event.title, limit: 1000 });
+      const dates = list
+        .filter((e) => e.recurrence_group === event.recurrence_group)
+        .map((e) => e.date)
+        .sort();
+      return dates[0] || event.date;
+    } catch {
+      return event.date;
+    }
+  },
+
+  /** 重建重复系列：删除原系列/事件后按新规则重新创建。
+   *
+   *  后端 PUT 只更新字段、不会重新生成实例，因此「修改重复规则」无法就地完成；
+   *  这里用「删除 + 重建」实现。注意：原实例的完成状态与 id 会丢失。
+   *  scope='series' 时以系列最早实例日期为锚点，否则以传入日期为锚点。 */
+  async rebuildSeries(
+    event: CalendarEvent,
+    base: EventInput,
+    recurrence: RecurrenceRule,
+    recurrenceEnd: string | null,
+    scope: EventUpdateScope = 'single',
+  ): Promise<CalendarEvent & ApiResponse> {
+    const isSeries = !!event.recurrence_group;
+    const anchor = isSeries && scope === 'series'
+      ? await eventsApi.findSeriesStartDate(event)
+      : (base.date || event.date);
+    await eventsApi.delete(event.id, isSeries ? scope : 'single');
+    const payload: EventInput = {
+      ...base,
+      date: anchor,
+      recurrence,
+      recurrence_end: recurrenceEnd || '',
+    };
+    return eventsApi.create(payload);
   },
 };

@@ -18,6 +18,7 @@ import { EVENT_COLORS, formatEventTime } from '../utils/calendar';
 import type { CalendarEvent } from '../types';
 import { colors } from '../theme/colors';
 import { spacing, fontSize, radius } from '../theme/spacing';
+import DatePickerModal from './DatePickerModal';
 
 interface SearchSheetProps {
   visible: boolean;
@@ -38,6 +39,10 @@ const STATUS_OPTIONS: { label: string; value: StatusFilter }[] = [
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** 单页结果条数 / 后端允许的最大条数 */
+const PAGE_SIZE = 200;
+const MAX_LIMIT = 1000;
+
 export default function SearchSheet({ visible, onClose, onJump, onToggle }: SearchSheetProps) {
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
@@ -48,8 +53,11 @@ export default function SearchSheet({ visible, onClose, onJump, onToggle }: Sear
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searched, setSearched] = useState(false);
+  const [limit, setLimit] = useState(PAGE_SIZE);
+  const [datePicker, setDatePicker] = useState<'start' | 'end' | null>(null);
 
-  const runSearch = useCallback(async () => {
+  const runSearch = useCallback(async (nextLimit?: number) => {
+    const effectiveLimit = nextLimit ?? limit;
     const s = start.trim();
     const e = end.trim();
     if (s && !DATE_RE.test(s)) {
@@ -73,22 +81,28 @@ export default function SearchSheet({ visible, onClose, onJump, onToggle }: Sear
         end: e || undefined,
         color: color || undefined,
         completed: status === 'all' ? undefined : status,
-        limit: 200,
+        limit: effectiveLimit,
       });
       setResults(data);
+      setLimit(effectiveLimit);
       setSearched(true);
     } catch {
       // handled by interceptor
     } finally {
       setLoading(false);
     }
-  }, [keyword, start, end, color, status]);
+  }, [keyword, start, end, color, status, limit]);
 
-  // 打开弹窗时先拉一次（默认展示最近事件）
+  // 打开弹窗时先拉一次（默认展示最近事件，重置分页）
   useEffect(() => {
-    if (visible) runSearch();
+    if (visible) {
+      setLimit(PAGE_SIZE);
+      runSearch(PAGE_SIZE);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
+
+  const hasMore = results.length >= limit && limit < MAX_LIMIT;
 
   const handleToggle = useCallback((ev: CalendarEvent) => {
     onToggle(ev.id);
@@ -160,7 +174,7 @@ export default function SearchSheet({ visible, onClose, onJump, onToggle }: Sear
         placeholder="输入关键字..."
         style={styles.input}
         left={<TextInput.Icon icon="magnify" />}
-        onSubmitEditing={runSearch}
+        onSubmitEditing={() => runSearch(PAGE_SIZE)}
         returnKeyType="search"
       />
 
@@ -182,23 +196,27 @@ export default function SearchSheet({ visible, onClose, onJump, onToggle }: Sear
 
       <Text style={styles.label}>日期范围（可选）</Text>
       <View style={styles.rangeRow}>
-        <TextInput
-          label="开始日期"
-          value={start}
-          onChangeText={setStart}
-          mode="outlined"
-          placeholder="YYYY-MM-DD"
-          style={styles.rangeInput}
-        />
+        <TouchableOpacity
+          style={styles.rangeField}
+          onPress={() => setDatePicker('start')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.rangeFieldLabel}>开始日期</Text>
+          <Text style={[styles.rangeFieldValue, !start && styles.rangeFieldPlaceholder]}>
+            {start || '不限'}
+          </Text>
+        </TouchableOpacity>
         <Text style={styles.rangeSep}>-</Text>
-        <TextInput
-          label="结束日期"
-          value={end}
-          onChangeText={setEnd}
-          mode="outlined"
-          placeholder="YYYY-MM-DD"
-          style={styles.rangeInput}
-        />
+        <TouchableOpacity
+          style={styles.rangeField}
+          onPress={() => setDatePicker('end')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.rangeFieldLabel}>结束日期</Text>
+          <Text style={[styles.rangeFieldValue, !end && styles.rangeFieldPlaceholder]}>
+            {end || '不限'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.label}>颜色</Text>
@@ -237,7 +255,7 @@ export default function SearchSheet({ visible, onClose, onJump, onToggle }: Sear
         </View>
       ) : null}
 
-      <TouchableOpacity style={styles.searchBtn} onPress={runSearch} disabled={loading}>
+      <TouchableOpacity style={styles.searchBtn} onPress={() => runSearch(PAGE_SIZE)} disabled={loading}>
         {loading ? (
           <ActivityIndicator size="small" color={colors.textInverse} />
         ) : (
@@ -249,13 +267,15 @@ export default function SearchSheet({ visible, onClose, onJump, onToggle }: Sear
       </TouchableOpacity>
 
       <Text style={styles.countText}>
-        共 {results.length} 条结果{results.length >= 200 ? '（已达上限，请缩小范围）' : ''}
+        共 {results.length} 条结果
+        {hasMore ? '（还有更多，可继续加载）' : results.length >= MAX_LIMIT ? `（已达上限 ${MAX_LIMIT}）` : ''}
       </Text>
     </View>
   );
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <>
+      <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
@@ -286,6 +306,21 @@ export default function SearchSheet({ visible, onClose, onJump, onToggle }: Sear
                       </View>
                     ) : null
                   }
+                  ListFooterComponent={
+                    hasMore ? (
+                      <TouchableOpacity
+                        style={styles.loadMoreBtn}
+                        onPress={() => runSearch(Math.min(limit + PAGE_SIZE, MAX_LIMIT))}
+                        disabled={loading}
+                      >
+                        {loading ? (
+                          <ActivityIndicator size="small" color={colors.primary} />
+                        ) : (
+                          <Text style={styles.loadMoreText}>加载更多</Text>
+                        )}
+                      </TouchableOpacity>
+                    ) : null
+                  }
                   contentContainerStyle={styles.listContent}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
@@ -295,7 +330,31 @@ export default function SearchSheet({ visible, onClose, onJump, onToggle }: Sear
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
-    </Modal>
+      </Modal>
+
+      <DatePickerModal
+        visible={datePicker === 'start'}
+        value={start}
+        title="开始日期"
+        allowClear
+        onConfirm={(d) => {
+          setStart(d);
+          setError('');
+        }}
+        onClose={() => setDatePicker(null)}
+      />
+      <DatePickerModal
+        visible={datePicker === 'end'}
+        value={end}
+        title="结束日期"
+        allowClear
+        onConfirm={(d) => {
+          setEnd(d);
+          setError('');
+        }}
+        onClose={() => setDatePicker(null)}
+      />
+    </>
   );
 }
 
@@ -387,6 +446,31 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
+  rangeField: {
+    flex: 1,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    minHeight: 52,
+    justifyContent: 'center',
+  },
+  rangeFieldLabel: {
+    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  rangeFieldValue: {
+    fontSize: fontSize.md,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  rangeFieldPlaceholder: {
+    color: colors.textMuted,
+    fontWeight: '400',
+  },
   rangeSep: {
     fontSize: fontSize.lg,
     color: colors.textMuted,
@@ -464,6 +548,21 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     color: colors.textMuted,
     marginTop: spacing.sm,
+  },
+  loadMoreBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    marginVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bgSecondary,
+  },
+  loadMoreText: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.primary,
   },
   resultItem: {
     flexDirection: 'row',

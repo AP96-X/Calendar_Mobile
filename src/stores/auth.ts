@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { authApi } from '../api/auth';
 import { clearCookie, setUnauthorizedCallback } from '../api/client';
-import { clearAllCache } from '../utils/cache';
+import { clearAllCache, setCacheNamespace } from '../utils/cache';
 import type { UserInfo, LoginParams } from '../types';
 
 interface AuthState {
@@ -18,6 +18,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
   // Set up the unauthorized callback — when a 401 occurs,
   // clear auth state so the app navigates back to login
   setUnauthorizedCallback(() => {
+    // 401：清空认证状态，同时清掉缓存并重置命名空间，
+    // 避免下一个登录用户读到上一个用户的缓存数据
+    setCacheNamespace(null);
+    clearAllCache().catch(() => {});
     set({ user: null, isAuthenticated: false });
   });
 
@@ -37,8 +41,9 @@ export const useAuthStore = create<AuthState>((set, get) => {
             display_name: data.display_name,
             role: data.role,
           };
-          // 缓存 key 未按用户隔离，登录后（可能是另一个账号）清空日历缓存，避免读到上一个用户的数据
+          // 缓存按用户命名空间隔离；登录后（可能是另一个账号）先清空日历缓存
           await clearAllCache();
+          setCacheNamespace(data.user_id);
           set({ user, isAuthenticated: true });
           return { success: true };
         }
@@ -58,6 +63,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       }
       await clearCookie();
       await clearAllCache();
+      setCacheNamespace(null);
       set({ user: null, isAuthenticated: false });
     },
 
@@ -69,16 +75,20 @@ export const useAuthStore = create<AuthState>((set, get) => {
           if (get().user?.user_id !== info.user_id) {
             await clearAllCache();
           }
+          setCacheNamespace(info.user_id);
           set({ user: info, isAuthenticated: true, isLoading: false });
         } else {
+          setCacheNamespace(null);
           set({ user: null, isAuthenticated: false, isLoading: false });
         }
       } catch {
+        setCacheNamespace(null);
         set({ user: null, isAuthenticated: false, isLoading: false });
       }
     },
 
     clearAuth: () => {
+      setCacheNamespace(null);
       set({ user: null, isAuthenticated: false, isLoading: false });
     },
   };

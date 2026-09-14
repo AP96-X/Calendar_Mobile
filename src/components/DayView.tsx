@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  RefreshControl,
   type LayoutChangeEvent,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -29,6 +30,8 @@ interface DayViewProps {
   onEventToggle: (eventId: number) => void;
   onAddEvent: (date: string) => void;
   onDeleteEvent: (eventId: number, scope?: EventUpdateScope) => void;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }
 
 const HOUR_HEIGHT = 56; // 每小时对应的像素高度
@@ -66,6 +69,8 @@ function DayViewInner({
   onEventToggle,
   onAddEvent,
   onDeleteEvent,
+  refreshing,
+  onRefresh,
 }: DayViewProps) {
   const lunarInfo = useMemo(() => getLunarDisplay(meta), [meta]);
   const badges = useMemo(() => getDayBadges(meta), [meta]);
@@ -121,7 +126,16 @@ function DayViewInner({
   }, []);
 
   const showNowLine = isToday(selectedDate);
-  const now = dayjs();
+  const [now, setNow] = useState(() => dayjs());
+
+  // 当前时间红线每分钟刷新（仅当天显示，否则定时器无意义）
+  useEffect(() => {
+    if (!showNowLine) return;
+    setNow(dayjs());
+    const timer = setInterval(() => setNow(dayjs()), 60 * 1000);
+    return () => clearInterval(timer);
+  }, [showNowLine, selectedDate]);
+
   const nowTop = ((now.hour() * 60 + now.minute()) / 60) * HOUR_HEIGHT;
 
   const handleDelete = (ev: CalendarEvent) => {
@@ -178,7 +192,14 @@ function DayViewInner({
       </View>
 
       {events.length === 0 ? (
-        <View style={styles.emptyState}>
+        <ScrollView
+          contentContainerStyle={styles.emptyState}
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} />
+            ) : undefined
+          }
+        >
           <MaterialCommunityIcons name="calendar-blank" size={48} color={colors.textMuted} />
           <Text style={styles.emptyText}>今日暂无事件</Text>
           <TouchableOpacity
@@ -188,7 +209,7 @@ function DayViewInner({
             <MaterialCommunityIcons name="plus" size={18} color={colors.textInverse} />
             <Text style={styles.emptyAddText}>添加事件</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       ) : (
         <>
           {/* 全天 / 未设置时间事件 */}
@@ -254,6 +275,11 @@ function DayViewInner({
             contentContainerStyle={styles.timelineContent}
             showsVerticalScrollIndicator={false}
             nestedScrollEnabled={true}
+            refreshControl={
+              onRefresh ? (
+                <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} />
+              ) : undefined
+            }
           >
             <View style={styles.timelineRow}>
               {/* 刻度列 */}
@@ -556,7 +582,7 @@ const styles = StyleSheet.create({
   },
   // ===== 空状态 =====
   emptyState: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: spacing.xxxl,

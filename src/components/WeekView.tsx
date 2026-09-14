@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { EventsByDate, CalendarMeta, CalendarEvent } from '../types';
 import { getWeekDates, isToday, getLunarDisplay, getDayBadges, type DayBadge } from '../utils/calendar';
@@ -13,6 +13,8 @@ interface WeekViewProps {
   onDayPress: (date: string) => void;
   onEventPress: (event: CalendarEvent) => void;
   onDayHeaderPress: (date: string) => void;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }
 
 const WEEKDAY_NAMES = ['一', '二', '三', '四', '五', '六', '日'];
@@ -34,6 +36,8 @@ function WeekViewInner({
   onDayPress,
   onEventPress,
   onDayHeaderPress,
+  refreshing,
+  onRefresh,
 }: WeekViewProps) {
   const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate]);
 
@@ -86,7 +90,16 @@ function WeekViewInner({
       </View>
 
       {/* 事件区域：7 列等分 + 共享垂直滚动 */}
-      <ScrollView style={styles.eventsScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>
+      <ScrollView
+        style={styles.eventsScroll}
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled={true}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} />
+          ) : undefined
+        }
+      >
         <View style={styles.eventsRow}>
           {weekDates.map((dateStr) => {
             const events = eventsData[dateStr] || [];

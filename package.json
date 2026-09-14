@@ -1,6 +1,6 @@
 {
   "name": "calendar-mobile",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "main": "index.ts",
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -31,7 +31,14 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "bump": "node scripts/bump-version.js",
+    "verify:signing": "bash scripts/verify-release-signing.sh",
+    "android:sdk": "bash scripts/ensure-android-sdk.sh",
+    "android:sync": "expo prebuild --platform android --no-install && npm run android:sdk",
+    "android:release": "npm run android:sync && cd android && ./gradlew assembleRelease",
+    "android:aab": "npm run android:sync && cd android && ./gradlew bundleRelease"
   },
   "private": true
 }

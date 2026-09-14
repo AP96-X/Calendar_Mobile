@@ -9,6 +9,7 @@ import {
   Dimensions,
   Animated,
   Easing,
+  AppState,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from 'react-native';
@@ -21,6 +22,7 @@ import DayView from '../components/DayView';
 import EventDetailSheet from '../components/EventDetailSheet';
 import EventFormSheet from '../components/EventFormSheet';
 import SearchSheet from '../components/SearchSheet';
+import CalendarSkeleton from '../components/CalendarSkeleton';
 import { eventsApi } from '../api/events';
 import { calendarApi } from '../api/calendar';
 import { getTodayStr, getMonthLabel, getWeekLabel, getDayLabel, getWeekDates, getISOWeekNumber } from '../utils/calendar';
@@ -37,8 +39,12 @@ interface PageParam {
   date?: string;
 }
 
+/** 稳定的空数组引用，避免日视图无事件时每次渲染都新建数组导致 memo 失效 */
+const EMPTY_EVENTS: CalendarEvent[] = [];
+
 export default function CalendarScreen() {
-  const now = useMemo(() => dayjs(), []);
+  const [todayStr, setTodayStr] = useState(getTodayStr());
+  const now = useMemo(() => dayjs(todayStr), [todayStr]);
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [currentYear, setCurrentYear] = useState(now.year());
   const [currentMonth, setCurrentMonth] = useState(now.month() + 1);
@@ -47,6 +53,31 @@ export default function CalendarScreen() {
   const [eventsData, setEventsData] = useState<EventsByDate>({});
   const [calendarMeta, setCalendarMeta] = useState<CalendarMeta>({});
   const [usingCache, setUsingCache] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+
+  /** 请求序号：只允许最新一次 fetch 写回 state，避免快速翻页时旧响应覆盖新数据 */
+  const fetchSeqRef = useRef(0);
+  /** 事件数据镜像：供乐观更新读取当前值，避免把 eventsData 加进回调依赖 */
+  const eventsDataRef = useRef<EventsByDate>({});
+  useEffect(() => {
+    eventsDataRef.current = eventsData;
+  }, [eventsData]);
+
+  // 跨午夜自动刷新“今天”（每分钟校验 + App 回到前台时校验）
+  useEffect(() => {
+    const sync = () => {
+      const next = getTodayStr();
+      setTodayStr((prev) => (prev === next ? prev : next));
+    };
+    const timer = setInterval(sync, 60 * 1000);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') sync();
+    });
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, []);
 
   // Event form/detail sheet state
   const [formVisible, setFormVisible] = useState(false);
@@ -221,6 +252,8 @@ export default function CalendarScreen() {
     const months = new Set<string>();
     if (viewMode === 'month') {
       // 三个月的 grid 可能跨越五个月（首尾行包含相邻月日期）
+      // 注意：三页分别是 current-1/current/current+1 月，最外侧两页的网格
+      // 还会各向外延伸一个月，因此需要 ±2 才能覆盖全部 126 个单元格的农历/节假日。
       const base = dayjs(`${currentYear}-${String(currentMonth).padStart(2, '0')}-01`);
       for (let i = -2; i <= 2; i++) {
         const m = base.add(i, 'month');
@@ -266,6 +299,7 @@ export default function CalendarScreen() {
   /** 拉取三页事件数据。forceRefresh=true 时绕过缓存直连服务端（手动刷新）。
    *  返回 true 表示拿到的是服务端新鲜数据；false 表示失败或降级为缓存数据。 */
   const fetchEvents = useCallback(async (forceRefresh = false): Promise<boolean> => {
+    const seq = ++fetchSeqRef.current;
     try {
       // 并行获取三页事件数据（prev / current / next）
       const results = await Promise.all(
@@ -291,6 +325,9 @@ export default function CalendarScreen() {
         Object.assign(newData, r.data);
         if (r.fromCache) anyFromCache = true;
       }
+
+      // 期间又发起了更新的请求 → 丢弃本次结果，避免旧响应覆盖新数据
+      if (seq !== fetchSeqRef.current) return !anyFromCache;
 
       // 本次拉取覆盖的日期集合：用于清掉「本地有、服务端已不再返回」的旧日期。
       // 若不做这步，某天的事件被全部删除后服务端不再返回该日期，
@@ -321,9 +358,11 @@ export default function CalendarScreen() {
         return Object.assign(next, newData);
       });
       setUsingCache(anyFromCache);
+      setHasLoadedOnce(true);
       return !anyFromCache;
     } catch {
       // handled by interceptor
+      setHasLoadedOnce(true);
       return false;
     }
   }, [viewMode, pageParams]);
@@ -491,23 +530,86 @@ export default function CalendarScreen() {
     setFormVisible(true);
   }, []);
 
+  /** 切换完成状态：乐观更新本地，失败回滚；服务端只返回新状态，无需重拉三页 */
   const handleEventToggle = useCallback(async (eventId: number) => {
+    const snapshot = eventsDataRef.current;
+    let targetDate: string | null = null;
+    let prevCompleted = false;
+    for (const [date, list] of Object.entries(snapshot)) {
+      const found = list.find((e) => e.id === eventId);
+      if (found) {
+        targetDate = date;
+        prevCompleted = found.completed;
+        break;
+      }
+    }
+
+    // 本地没有该事件（例如来自搜索结果）→ 退化为请求后刷新
+    if (!targetDate) {
+      try {
+        await eventsApi.toggle(eventId);
+        await fetchEvents();
+      } catch {
+        // handled by interceptor
+      }
+      return;
+    }
+
+    const date = targetDate;
+    const nextCompleted = !prevCompleted;
+    const patch = (completed: boolean) =>
+      setEventsData((prev) => {
+        const list = prev[date];
+        if (!list) return prev;
+        return {
+          ...prev,
+          [date]: list.map((e) => (e.id === eventId ? { ...e, completed } : e)),
+        };
+      });
+
+    patch(nextCompleted);
     try {
       await eventsApi.toggle(eventId);
-      await fetchEvents();
     } catch {
-      // handled by interceptor
+      patch(prevCompleted);
+      showToast('操作失败，请重试');
     }
-  }, [fetchEvents]);
+  }, [fetchEvents, showToast]);
 
+  /** 删除事件：乐观从本地移除（整个系列按 recurrence_group 一并移除），失败回滚 */
   const handleEventDelete = useCallback(async (eventId: number, scope: EventUpdateScope = 'single') => {
+    const snapshot = eventsDataRef.current;
+    let group: string | null = null;
+    if (scope === 'series') {
+      for (const list of Object.values(snapshot)) {
+        const found = list.find((e) => e.id === eventId);
+        if (found?.recurrence_group) {
+          group = found.recurrence_group;
+          break;
+        }
+      }
+    }
+    const shouldRemove = (e: CalendarEvent) =>
+      scope === 'series' && group ? e.recurrence_group === group : e.id === eventId;
+
+    // 乐观删除
+    setEventsData((prev) => {
+      const next: EventsByDate = {};
+      for (const [date, list] of Object.entries(prev)) {
+        const filtered = list.filter((e) => !shouldRemove(e));
+        if (filtered.length > 0) next[date] = filtered;
+      }
+      return next;
+    });
+
     try {
       await eventsApi.delete(eventId, scope);
-      await fetchEvents();
     } catch {
-      // handled by interceptor
+      // 失败 → 恢复到操作前的数据
+      setEventsData(snapshot);
+      showToast('删除失败，请重试');
     }
-  }, [fetchEvents]);
+  }, [showToast]);
 
   // ===== 搜索结果跳转：定位到该事件日期并打开详情 =====
   const handleSearchJump = useCallback((event: CalendarEvent) => {
@@ -575,59 +677,83 @@ export default function CalendarScreen() {
     return getDayLabel(params.date!);
   }, [displayedPageIndex, pageParams, viewMode]);
 
-  // ===== 渲染单页 =====
-  const renderPage = (pageIndex: number) => {
-    const params = pageParams[pageIndex];
+  // ===== 渲染三页（memo：toast / FAB 等无关状态变化时不再重建 3 页共 126 个日期单元格）=====
+  const pages = useMemo(() => {
+    const renderPage = (pageIndex: number) => {
+      const params = pageParams[pageIndex];
 
-    if (viewMode === 'month') {
+      if (viewMode === 'month') {
+        return (
+          <View style={{ width: pageWidth }} key={`page-${pageIndex}`}>
+            <MonthView
+              year={params.year!}
+              month={params.month!}
+              eventsData={eventsData}
+              calendarMeta={calendarMeta}
+              onDayPress={handleDayPress}
+              onDayNumberPress={switchToDayView}
+              onEventPress={handleEventPress}
+              onMorePress={switchToDayView}
+              onWeekNumPress={switchToWeekView}
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+            />
+          </View>
+        );
+      }
+
+      if (viewMode === 'week') {
+        return (
+          <View style={{ width: pageWidth }} key={`page-${pageIndex}`}>
+            <WeekView
+              selectedDate={params.date!}
+              eventsData={eventsData}
+              calendarMeta={calendarMeta}
+              onDayPress={handleDayPress}
+              onEventPress={handleEventPress}
+              onDayHeaderPress={switchToDayView}
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+            />
+          </View>
+        );
+      }
+
+      // day
+      const dayEvents = eventsData[params.date!] || EMPTY_EVENTS;
       return (
         <View style={{ width: pageWidth }} key={`page-${pageIndex}`}>
-          <MonthView
-            year={params.year!}
-            month={params.month!}
-            eventsData={eventsData}
-            calendarMeta={calendarMeta}
-            onDayPress={handleDayPress}
-            onDayNumberPress={switchToDayView}
-            onEventPress={handleEventPress}
-            onMorePress={switchToDayView}
-            onWeekNumPress={switchToWeekView}
-          />
-        </View>
-      );
-    }
-
-    if (viewMode === 'week') {
-      return (
-        <View style={{ width: pageWidth }} key={`page-${pageIndex}`}>
-          <WeekView
+          <DayView
             selectedDate={params.date!}
-            eventsData={eventsData}
-            calendarMeta={calendarMeta}
-            onDayPress={handleDayPress}
+            events={dayEvents}
+            meta={calendarMeta[params.date!]}
             onEventPress={handleEventPress}
-            onDayHeaderPress={switchToDayView}
+            onEventToggle={handleEventToggle}
+            onAddEvent={handleDayPress}
+            onDeleteEvent={handleEventDelete}
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
           />
         </View>
       );
-    }
+    };
 
-    // day
-    const dayEvents = eventsData[params.date!] || [];
-    return (
-      <View style={{ width: pageWidth }} key={`page-${pageIndex}`}>
-        <DayView
-          selectedDate={params.date!}
-          events={dayEvents}
-          meta={calendarMeta[params.date!]}
-          onEventPress={handleEventPress}
-          onEventToggle={handleEventToggle}
-          onAddEvent={handleDayPress}
-          onDeleteEvent={handleEventDelete}
-        />
-      </View>
-    );
-  };
+    return [renderPage(0), renderPage(1), renderPage(2)];
+  }, [
+    viewMode,
+    pageWidth,
+    pageParams,
+    eventsData,
+    calendarMeta,
+    refreshing,
+    handleRefresh,
+    handleDayPress,
+    switchToDayView,
+    handleEventPress,
+    switchToWeekView,
+    handleEventToggle,
+    handleEventDelete,
+  ]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -674,27 +800,29 @@ export default function CalendarScreen() {
         </View>
       )}
 
-      {/* 三页分页 ScrollView — 内容跟随手指，类似手机桌面左右滑动 */}
-      <ScrollView
-        key={`${viewMode}-${scrollKey}`}
-        ref={scrollRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onScroll={onScroll}
-        onMomentumScrollEnd={onMomentumScrollEnd}
-        scrollEventThrottle={16}
-        contentOffset={{ x: pageWidth, y: 0 }}
-        onLayout={(e) => {
-          const w = e.nativeEvent.layout.width;
-          if (w !== pageWidth) setPageWidth(w);
-        }}
-        style={styles.contentContainer}
-      >
-        {renderPage(0)}
-        {renderPage(1)}
-        {renderPage(2)}
-      </ScrollView>
+      {/* 首次加载骨架屏；加载完成后显示三页分页 ScrollView */}
+      {!hasLoadedOnce ? (
+        <CalendarSkeleton mode={viewMode} />
+      ) : (
+        <ScrollView
+          key={`${viewMode}-${scrollKey}`}
+          ref={scrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onScroll={onScroll}
+          onMomentumScrollEnd={onMomentumScrollEnd}
+          scrollEventThrottle={16}
+          contentOffset={{ x: pageWidth, y: 0 }}
+          onLayout={(e) => {
+            const w = e.nativeEvent.layout.width;
+            if (w !== pageWidth) setPageWidth(w);
+          }}
+          style={styles.contentContainer}
+        >
+          {pages}
+        </ScrollView>
+      )}
 
       {/* 切换提示 toast */}
       <View style={styles.toastContainer} pointerEvents="none">

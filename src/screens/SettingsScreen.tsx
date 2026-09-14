@@ -25,6 +25,11 @@ import { passwordStrengthError } from '../utils/password';
 import { colors } from '../theme/colors';
 import { spacing, fontSize, radius } from '../theme/spacing';
 import dayjs from 'dayjs';
+// 版本号唯一真相源：直接读 app.json，避免与原生 versionName 各写一份后漂移。
+// 原生 versionName/versionCode 由 `expo prebuild` 从同一个 app.json 生成。
+import appJson from '../../app.json';
+
+const APP_VERSION = appJson.expo.version;
 
 export default function SettingsScreen() {
   const { user, logout, refresh } = useAuthStore();
@@ -465,7 +470,7 @@ export default function SettingsScreen() {
         </View>
 
         {/* App version */}
-        <Text style={styles.versionText}>日历 v1.1.0</Text>
+        <Text style={styles.versionText}>日历 v{APP_VERSION}</Text>
         {icpNumber ? (
           <TouchableOpacity
             onPress={() => Linking.openURL('https://beian.miit.gov.cn/')}

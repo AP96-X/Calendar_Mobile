@@ -22,6 +22,25 @@ const DEFAULT_TTL = 24 * 60 * 60 * 1000; // 24 小时
  */
 let cacheGeneration = 0;
 
+/**
+ * 缓存命名空间：按登录用户隔离。
+ *
+ * 之前缓存 key 不区分用户，切换账号时必须依赖 clearAllCache 才不至于读到
+ * 上一用户的数据；一旦漏掉某个入口（例如 401 自动登出）就会串数据。
+ * 现在 key 里带上 user_id，即使清理失败也不会跨用户命中。
+ */
+let cacheNamespace = '';
+
+/** 设置缓存命名空间（传 user_id；传 null / 空串表示未登录） */
+export function setCacheNamespace(ns: string | number | null | undefined): void {
+  const next = ns === null || ns === undefined || ns === '' ? '' : `u${ns}_`;
+  if (next !== cacheNamespace) {
+    cacheNamespace = next;
+    // 命名空间变化后，进行中的请求不应再把结果写回（可能属于上一个用户）
+    invalidateCache();
+  }
+}
+
 /** 标记缓存失效：不删除数据，仅让所有进行中的请求结果不再写回缓存 */
 export function invalidateCache(): void {
   cacheGeneration += 1;
@@ -37,7 +56,7 @@ interface CacheEntry<T> {
  * 生成缓存 key
  */
 function cacheKey(key: string): string {
-  return `${CACHE_PREFIX}${key}`;
+  return `${CACHE_PREFIX}${cacheNamespace}${key}`;
 }
 
 /**
@@ -99,6 +118,27 @@ export async function clearAllCache(): Promise<void> {
     const cacheKeys = keys.filter((k) => k.startsWith(CACHE_PREFIX));
     if (cacheKeys.length > 0) {
       await AsyncStorage.multiRemove(cacheKeys);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * 仅清除事件相关缓存（保留日历元数据缓存）。
+ *
+ * 事件是所有增删改操作都会影响的数据，变更后统一清空事件缓存，
+ * 避免「缓存优先」策略下读到旧数据。跨命名空间清理，登出时也能兜底。
+ */
+export async function clearEventCache(): Promise<void> {
+  invalidateCache();
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const eventKeys = keys.filter(
+      (k) => k.startsWith(CACHE_PREFIX) && k.includes('_events_')
+    );
+    if (eventKeys.length > 0) {
+      await AsyncStorage.multiRemove(eventKeys);
     }
   } catch {
     // ignore

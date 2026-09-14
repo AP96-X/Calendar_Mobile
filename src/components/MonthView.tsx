@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { memo, useMemo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import dayjs from 'dayjs';
 import type { EventsByDate, CalendarMeta, CalendarEvent } from '../types';
 import {
@@ -20,11 +20,13 @@ interface MonthViewProps {
   onEventPress: (event: CalendarEvent) => void;
   onMorePress: (date: string) => void;
   onWeekNumPress: (date: string) => void;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }
 
 const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
 
-export default function MonthView({
+function MonthViewInner({
   year,
   month,
   eventsData,
@@ -34,6 +36,8 @@ export default function MonthView({
   onEventPress,
   onMorePress,
   onWeekNumPress,
+  refreshing,
+  onRefresh,
 }: MonthViewProps) {
   const gridDates = useMemo(() => getMonthGridDates(year, month), [year, month]);
 
@@ -111,12 +115,24 @@ export default function MonthView({
       </View>
 
       {/* Days grid — scrollable, rows auto-size to content */}
-      <ScrollView style={styles.grid} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>
+      <ScrollView
+        style={styles.grid}
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled={true}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} />
+          ) : undefined
+        }
+      >
         {rows}
       </ScrollView>
     </View>
   );
 }
+
+export const MonthView = memo(MonthViewInner);
+export default MonthView;
 
 const styles = StyleSheet.create({
   container: {

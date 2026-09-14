@@ -192,30 +192,224 @@ npx expo start
 
 ## 构建发布
 
-### Android
+本项目采用**纯本地打包**，不使用 EAS 云端构建。
+
+`android/` 与 `ios/` 是 `expo prebuild` 的生成物，未纳入版本控制；**`app.json` 是全部配置与版本号的唯一真相源**。
+
+### 版本号管理
+
+| 字段 | 位置 | 说明 |
+|------|------|------|
+| `version` | `app.json` → `expo.version` | 用户可见版本，生成原生 `versionName` |
+| `versionCode` | `app.json` → `expo.android.versionCode` | 商店构建号，**每次上传必须递增** |
+| `buildNumber` | `app.json` → `expo.ios.buildNumber` | iOS 构建号，规则同 `versionCode` |
+
+设置页显示的版本号直接读取 `app.json`，因此不会与原生版本漂移。
 
 ```bash
-# 使用 EAS Build
-npm install -g eas-cli
-eas build --platform android
-
-# 或本地构建
-npx expo prebuild --platform android
-cd android
-./gradlew assembleRelease
+npm run bump patch                # 1.2.0 -> 1.2.1
+npm run bump minor                # 1.2.0 -> 1.3.0
+npm run bump major                # 1.2.0 -> 2.0.0
+npm run bump 1.2.0                # version 不变，只递增构建号（同版本重发包）
+npm run bump -- --dry-run patch   # 只预览，不写入
 ```
+
+> **`version` 与构建号是两套独立的号。** 无论哪种场景，`versionCode` / `buildNumber` 都会 **+1**——应用商店只认 `versionCode` 是否比上次大，用户只看 `version`。
+
+> 不要手改 `app.json` 的版本字段。`npm run bump` 会同时更新 `app.json` 与 `package.json` 的 `version`，以及 Android `versionCode` / iOS `buildNumber`。
+
+### 打包步骤（按升级场景）
+
+通用流程五步，**三种场景只有第 ② 步的命令不同**：
+
+```bash
+# ① 改完代码，先自测
+npm run typecheck
+
+# ② 定版本（见下方各场景）
+npm run bump -- --dry-run <类型>   # 先预览
+npm run bump <类型>                # 再写入
+
+# ③ 记录更新日志：编辑 CHANGELOG.md，新增 "## [V新版本] - YYYY-MM-DD"
+
+# ④ 出包（内部已含 android:sync，无需手动执行）
+npm run android:release   # APK：自装 / 内测分发
+npm run android:aab       # AAB：Google Play 上架
+
+# ⑤ 验证版本 + 签名（见「打包后验证」）
+npm run verify:signing
+```
+
+> `npm run android:release` = `android:sync`（prebuild 重建 `android/` 并写入 `local.properties`）+ `gradlew assembleRelease`。
+> 只有想单独同步原生工程而不打包时，才需要手动执行 `npm run android:sync`。
+
+#### 场景 A：V1.2.0 → V1.2.1（修订版：修 bug、无新功能）
+
+```bash
+npm run typecheck
+npm run bump -- --dry-run patch    # 预览：version 1.2.0 -> 1.2.1, versionCode -> 4, buildNumber -> 2
+npm run bump patch
+# 编辑 CHANGELOG.md 新增 "## [V1.2.1] - YYYY-MM-DD"
+npm run android:release            # 或 npm run android:aab
+npm run verify:signing
+```
+
+| 字段 | 变化 |
+|------|------|
+| `version` | 1.2.0 → **1.2.1** |
+| `versionCode` | 3 → **4** |
+| `buildNumber` | 1 → **2** |
+
+#### 场景 B：V1.2.0 → V1.3.0（次版本：新增功能、向后兼容）
+
+```bash
+npm run typecheck
+npm run bump -- --dry-run minor    # 预览：version 1.2.0 -> 1.3.0, versionCode -> 4, buildNumber -> 2
+npm run bump minor
+# 编辑 CHANGELOG.md 新增 "## [V1.3.0] - YYYY-MM-DD"
+npm run android:release            # 或 npm run android:aab
+npm run verify:signing
+```
+
+| 字段 | 变化 |
+|------|------|
+| `version` | 1.2.0 → **1.3.0** |
+| `versionCode` | 3 → **4** |
+| `buildNumber` | 1 → **2** |
+
+#### 场景 C：V1.2.0 → V2.0.0（主版本：破坏性变更）
+
+```bash
+npm run typecheck
+npm run bump -- --dry-run major    # 预览：version 1.2.0 -> 2.0.0, versionCode -> 4, buildNumber -> 2
+npm run bump major
+# 编辑 CHANGELOG.md 新增 "## [V2.0.0] - YYYY-MM-DD"（建议写明不兼容点与升级方式）
+npm run android:release            # 或 npm run android:aab
+npm run verify:signing
+```
+
+| 字段 | 变化 |
+|------|------|
+| `version` | 1.2.0 → **2.0.0** |
+| `versionCode` | 3 → **4** |
+| `buildNumber` | 1 → **2** |
+
+> 三种场景的 `versionCode` 都是 3 → 4，**差别只在 `version` 的语义**：修订=修 bug、次版本=加功能、主版本=不兼容改动。
+
+#### 场景 D：版本不变，只重新出包
+
+改了签名配置、调整了构建参数，或上一次的包需要重打时：
+
+```bash
+npm run bump 1.2.0        # version 保持 1.2.0，versionCode 3 -> 4
+npm run android:release
+npm run verify:signing
+```
+
+> ⚠️ **绝不能复用同一个 `versionCode` 重复上传商店**，否则 Google Play 会拒收。
+
+#### 打包后验证
+
+产物位置：
+
+- APK：`android/app/build/outputs/apk/release/app-release.apk`
+- AAB：`android/app/build/outputs/bundle/release/app-release.aab`
+
+建议每次出包后核对**版本号**与**签名**两项：
+
+```bash
+# ① 版本：确认 APK 内嵌的版本与 app.json 一致
+AAPT=$(ls -d "$HOME"/Android/Sdk/build-tools/*/aapt2 | sort -V | tail -1)
+"$AAPT" dump badging android/app/build/outputs/apk/release/app-release.apk | grep '^package:'
+# → package: name='com.calendar.app' versionCode='4' versionName='1.2.1' ...
+
+# ② 签名：确认真的是正式证书，而不是静默回退到 debug
+npm run verify:signing
+```
+
+### Android SDK 定位
+
+Gradle 需要 `ANDROID_HOME` / `ANDROID_SDK_ROOT`，或 `android/local.properties` 里的 `sdk.dir`。
+由于 **`expo prebuild` 会清空重建 `android/`、连带删掉 `local.properties`**，直接跑 `./gradlew` 会报：
+
+```
+SDK location not found. Define a valid SDK location with an ANDROID_HOME
+environment variable or by setting the sdk.dir path in ... local.properties
+```
+
+因此 `npm run android:sync` 末尾会自动调用 `scripts/ensure-android-sdk.sh`，
+按 `ANDROID_HOME` → `ANDROID_SDK_ROOT` → `~/Android/Sdk` → … 的顺序探测 SDK 并写入 `local.properties`。
+
+也可以单独执行，或强制重写：
+
+```bash
+npm run android:sdk                 # 缺失/不一致时写入
+bash scripts/ensure-android-sdk.sh --force   # 总是重写
+```
+
+> **本机已配置**：`ANDROID_HOME` 与 `ANDROID_SDK_ROOT` 已写入 `~/.bashrc` 和 `~/.profile`，并把 `platform-tools`（adb）、`emulator` 加入了 `PATH`。
+> 换机器时可照抄：
+> ```bash
+> export ANDROID_HOME="$HOME/Android/Sdk"
+> export ANDROID_SDK_ROOT="$ANDROID_HOME"
+> ```
+
+### ✅ 正式签名（已配置）
+
+release 包使用正式 keystore 签名。由于 `expo prebuild` 每次都会清空重建 `android/`，签名配置**不能手改 `build.gradle`**，而是通过 config plugin 注入，因此重建后依然有效。
+
+| 文件 | 作用 |
+|------|------|
+| `plugins/withAndroidReleaseSigning.js` | config plugin：在 `build.gradle` 末尾追加 release `signingConfig`，从 Gradle 全局属性读凭据 |
+| `~/keystores/calendar/calendar-release.keystore` | 正式签名密钥（仓库外，`chmod 600`） |
+| `~/.gradle/gradle.properties` | 签名凭据 `CALENDAR_UPLOAD_*`（仓库外，`chmod 600`） |
+
+**生成 / 轮换密钥：**
+
+```bash
+# 生成 keystore 并写入 ~/.gradle/gradle.properties（随机强密码，不回显）
+scripts/create-release-keystore.sh
+
+# 自定义路径 / 别名 / 自己的密码
+scripts/create-release-keystore.sh --keystore ~/keystores/foo.keystore --alias foo --password 'YourPass'
+
+# 覆盖已有 keystore（危险：旧签名永久失效，无法更新已上架 App）
+scripts/create-release-keystore.sh --force
+```
+
+**验证签名是否生效：**
+
+```bash
+# 1) 构建配置层面：确认 release variant 指向 SigningConfig "release"
+cd android && ./gradlew :app:signingReport
+
+# 2) 产物层面（推荐，防止静默回退）：校验打出来的 APK / AAB 到底用的哪个证书
+npm run verify:signing                                    # 自动查找 release 产物
+npm run verify:signing -- path/to/app-release.apk         # 或指定产物
+```
+
+`verify:signing` 会把产物证书指纹与 keystore 指纹、debug 证书指纹逐一比对：
+
+- ✅ 与正式 keystore 一致 → 退出码 0
+- ❌ 命中 debug 证书指纹 → 判定「静默回退」，退出码 1
+- ❌ 与 keystore 不匹配 / 未签名 / 签名损坏 → 退出码 1
+
+建议**每次出包后都跑一次**，避免"以为签好了、其实回退了"。
+
+**安全须知：**
+
+- ⚠️ **keystore 与密码必须备份到仓库之外的安全位置**。丢失后无法更新已上架的应用（除非启用 Play App Signing 托管）。
+- 凭据只存在于 `~/.gradle/gradle.properties`，不会进入 git；`.gitignore` 已忽略 `*.jks` / `*.keystore`。
+- 换机器或凭据缺失时，plugin 会回退到 debug 签名，并在构建 release 时打印警告，不会让构建直接失败。
 
 ### iOS
 
-```bash
-# 使用 EAS Build
-eas build --platform ios
+需 macOS + Xcode，且当前仓库尚未生成 `ios/` 工程：
 
-# 或本地构建（需 macOS）
+```bash
 npx expo prebuild --platform ios
-cd ios
-pod install
-# 使用 Xcode 打开 .xcworkspace 构建归档
+cd ios && pod install
+# 用 Xcode 打开 .xcworkspace 构建归档
 ```
 
 ## 系统要求
