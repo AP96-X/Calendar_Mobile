@@ -13,6 +13,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const CACHE_PREFIX = 'calendar_cache_';
 const DEFAULT_TTL = 24 * 60 * 60 * 1000; // 24 小时
 
+/**
+ * 缓存代际：每次缓存失效（清空/增删改）时自增。
+ *
+ * 网络请求在发起前记录当时的代际，写回缓存前再比对：若期间发生过失效，
+ * 说明本次响应可能已过期（例如删除请求在途时，早先发出的 GET 才回来），
+ * 直接丢弃不写入缓存，避免旧数据把已清空的缓存重新「污染」。
+ */
+let cacheGeneration = 0;
+
+/** 标记缓存失效：不删除数据，仅让所有进行中的请求结果不再写回缓存 */
+export function invalidateCache(): void {
+  cacheGeneration += 1;
+}
+
 interface CacheEntry<T> {
   data: T;
   timestamp: number;
@@ -79,6 +93,7 @@ export async function getStaleCache<T>(key: string): Promise<T | null> {
  * 缓存 key 未按用户做命名空间隔离，切换账号时需清空，避免读到上一个用户的数据。
  */
 export async function clearAllCache(): Promise<void> {
+  invalidateCache();
   try {
     const keys = await AsyncStorage.getAllKeys();
     const cacheKeys = keys.filter((k) => k.startsWith(CACHE_PREFIX));
@@ -115,9 +130,13 @@ export async function fetchWithCache<T>(
     }
   }
 
+  // 记录发起时的缓存代际；若请求期间发生失效，则本次响应不再写回缓存
+  const generation = cacheGeneration;
   try {
     const data = await fetcher();
-    await setCache(key, data, ttl);
+    if (generation === cacheGeneration) {
+      await setCache(key, data, ttl);
+    }
     return { data, fromCache: false };
   } catch (error) {
     // 网络失败，尝试缓存降级（含过期数据）

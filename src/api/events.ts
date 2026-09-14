@@ -7,7 +7,7 @@ import type {
   EventsByDate,
   ApiResponse,
 } from '../types';
-import { fetchWithCache } from '../utils/cache';
+import { fetchWithCache, invalidateCache } from '../utils/cache';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /** Convert a flat event array to a date-keyed map */
@@ -27,6 +27,8 @@ const EVENTS_TTL = 30 * 60 * 1000;
  *  缓存策略是“缓存优先”，若增删改后不清缓存，下次读取会命中旧数据，
  *  因此所有变更操作统一清空事件缓存。 */
 async function clearAllEventCache(): Promise<void> {
+  // 先让进行中的请求结果失效，再删除已写入的缓存
+  invalidateCache();
   try {
     const keys = await AsyncStorage.getAllKeys();
     const eventKeys = keys.filter((k) =>
@@ -88,32 +90,34 @@ export const eventsApi = {
     );
   },
 
-  create(data: EventInput): Promise<CalendarEvent & ApiResponse> {
-    // 先清空事件缓存再请求，保证缓存优先策略下之后读取到最新数据
-    return clearAllEventCache().then(() =>
-      client.post('/api/events', data).then((r) => r.data)
-    );
+  async create(data: EventInput): Promise<CalendarEvent & ApiResponse> {
+    // 请求成功后再清空事件缓存：既保证之后读到最新数据，
+    // 又避免「缓存已清、请求还在途中」时被并发的 GET 把旧数据写回
+    const r = await client.post('/api/events', data);
+    await clearAllEventCache();
+    return r.data;
   },
 
-  update(id: number, data: Partial<EventInput>, scope: EventUpdateScope = 'single'): Promise<ApiResponse> {
+  async update(id: number, data: Partial<EventInput>, scope: EventUpdateScope = 'single'): Promise<ApiResponse> {
     // 日期可能变更，无法确定旧日期对应的缓存 key，统一清空事件缓存
-    return clearAllEventCache().then(() =>
-      client.put(`/api/events/${id}`, { ...data, scope }).then((r) => r.data)
-    );
+    const r = await client.put(`/api/events/${id}`, { ...data, scope });
+    await clearAllEventCache();
+    return r.data;
   },
 
-  toggle(id: number): Promise<{ completed: boolean }> {
+  async toggle(id: number): Promise<{ completed: boolean }> {
     // 这里拿不到事件日期，统一清空事件缓存
-    return clearAllEventCache().then(() =>
-      client.post(`/api/events/${id}/toggle`).then((r) => r.data)
-    );
+    const r = await client.post(`/api/events/${id}/toggle`);
+    await clearAllEventCache();
+    return r.data;
   },
 
-  delete(id: number, scope: EventUpdateScope = 'single'): Promise<ApiResponse> {
-    // 不确定事件属于哪天，统一清空事件缓存
-    return clearAllEventCache().then(() =>
-      client.delete(`/api/events/${id}`, { params: { scope } }).then((r) => r.data)
-    );
+  async delete(id: number, scope: EventUpdateScope = 'single'): Promise<ApiResponse> {
+    // 不确定事件属于哪天，统一清空事件缓存。
+    // 放在请求成功之后：避免请求在途时并发的 GET 把「删除前」的数据写回已清空的缓存
+    const r = await client.delete(`/api/events/${id}`, { params: { scope } });
+    await clearAllEventCache();
+    return r.data;
   },
 
   /** 搜索 / 筛选事件（不走缓存，始终查询服务端最新数据） */
@@ -122,21 +126,19 @@ export const eventsApi = {
   },
 
   /** Import events from an Excel file (uses expo-document-picker result) */
-  importExcel(uri: string, fileName: string): Promise<ApiResponse> {
-    // 导入会批量新增/覆盖事件，先清空事件缓存
+  async importExcel(uri: string, fileName: string): Promise<ApiResponse> {
+    // 导入会批量新增/覆盖事件，请求成功后再清空事件缓存
     const formData = new FormData();
     formData.append('file', {
       uri,
       name: fileName,
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     } as unknown as File);
-    return clearAllEventCache().then(() =>
-      client
-        .post('/api/events/import', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        })
-        .then((r) => r.data)
-    );
+    const r = await client.post('/api/events/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    await clearAllEventCache();
+    return r.data;
   },
 
   /** 获取当前用户有事件数据的年份列表 */
