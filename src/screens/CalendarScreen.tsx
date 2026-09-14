@@ -242,7 +242,34 @@ export default function CalendarScreen() {
         if (r.fromCache) anyFromCache = true;
       }
 
-      setEventsData((prev) => ({ ...prev, ...newData }));
+      // 本次拉取覆盖的日期集合：用于清掉「本地有、服务端已不再返回」的旧日期。
+      // 若不做这步，某天的事件被全部删除后服务端不再返回该日期，
+      // 增量合并会把旧数据一直留在 state 里，表现为「已删除但视图仍显示」。
+      const fetchedDates = new Set<string>();
+      if (viewMode === 'month') {
+        for (const p of pageParams) {
+          const ym = `${p.year}-${String(p.month).padStart(2, '0')}`;
+          const days = dayjs(`${ym}-01`).daysInMonth();
+          for (let d = 1; d <= days; d++) {
+            fetchedDates.add(`${ym}-${String(d).padStart(2, '0')}`);
+          }
+        }
+      } else if (viewMode === 'week') {
+        for (const p of pageParams) {
+          getWeekDates(p.date!).forEach((d) => fetchedDates.add(d));
+        }
+      } else {
+        for (const p of pageParams) fetchedDates.add(p.date!);
+      }
+
+      setEventsData((prev) => {
+        const next = { ...prev };
+        // 落在本次拉取范围内、但服务端已不存在的日期 → 删除（而非保留旧数据）
+        for (const key of Object.keys(next)) {
+          if (fetchedDates.has(key) && !(key in newData)) delete next[key];
+        }
+        return Object.assign(next, newData);
+      });
       setUsingCache(anyFromCache);
       return !anyFromCache;
     } catch {
