@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   ScrollView,
   Dimensions,
   Animated,
@@ -108,6 +109,55 @@ export default function CalendarScreen() {
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
+
+  // ===== 聚合操作 FAB（添加 / 搜索 / 刷新）=====
+  const [fabOpen, setFabOpen] = useState(false);
+  const fabAnim = useRef(new Animated.Value(0)).current;
+  /** 三个菜单项各自的开合进度（0=收起，1=展开），用于错峰弹出 */
+  const fabItemAnims = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
+
+  useEffect(() => {
+    Animated.spring(fabAnim, {
+      toValue: fabOpen ? 1 : 0,
+      useNativeDriver: true,
+      friction: 7,
+      tension: 70,
+    }).start();
+
+    // 展开时从最靠近主按钮的一项开始依次弹出；收起时反向
+    const ordered = fabOpen ? [...fabItemAnims].reverse() : fabItemAnims;
+    Animated.stagger(
+      fabOpen ? 55 : 35,
+      ordered.map((anim) =>
+        fabOpen
+          ? Animated.spring(anim, {
+              toValue: 1,
+              useNativeDriver: true,
+              friction: 7,
+              tension: 70,
+            })
+          : Animated.timing(anim, {
+              toValue: 0,
+              duration: 140,
+              useNativeDriver: true,
+            })
+      )
+    ).start();
+  }, [fabOpen, fabAnim, fabItemAnims]);
+
+  const fabBackdropOpacity = fabAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const fabIconRotate = fabAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '45deg'],
+  });
+  const closeFab = useCallback(() => setFabOpen(false), []);
 
   /** 显示切换提示，1 秒后自动消失 */
   const showToast = useCallback((text: string) => {
@@ -485,6 +535,38 @@ export default function CalendarScreen() {
     handleDayPress(date);
   }, [viewMode, currentYear, currentMonth, selectedDate, now, handleDayPress]);
 
+  // ===== 聚合 FAB 菜单项（自上而下：添加 / 搜索 / 刷新）=====
+  const fabActions = [
+    {
+      key: 'add',
+      label: '添加',
+      icon: 'plus' as const,
+      onPress: () => {
+        setFabOpen(false);
+        handleAddEvent();
+      },
+    },
+    {
+      key: 'search',
+      label: '搜索',
+      icon: 'magnify' as const,
+      onPress: () => {
+        setFabOpen(false);
+        setSearchVisible(true);
+      },
+    },
+    {
+      key: 'refresh',
+      label: '刷新',
+      icon: 'refresh' as const,
+      onPress: async () => {
+        // 刷新期间保持菜单展开，让图标旋转给出反馈；结束后再收起
+        await handleRefresh();
+        setFabOpen(false);
+      },
+    },
+  ];
+
   // Date label — 基于当前显示页（滑动中实时更新，无滞后）
   const dateLabel = useMemo(() => {
     const params = pageParams[displayedPageIndex] || pageParams[1];
@@ -564,34 +646,9 @@ export default function CalendarScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.headerRight}>
-          <TouchableOpacity
-            onPress={() => setSearchVisible(true)}
-            style={styles.navButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityLabel="搜索事件"
-          >
-            <MaterialCommunityIcons name="magnify" size={22} color={colors.text} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleRefresh}
-            disabled={refreshing}
-            style={styles.navButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityLabel="刷新事件"
-          >
-            <Animated.View style={{ transform: [{ rotate: refreshSpin }] }}>
-              <MaterialCommunityIcons
-                name="refresh"
-                size={22}
-                color={refreshing ? colors.primary : colors.text}
-              />
-            </Animated.View>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigate(1)} style={styles.navButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <MaterialCommunityIcons name="chevron-right" size={28} color={colors.text} />
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={() => navigate(1)} style={styles.navButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <MaterialCommunityIcons name="chevron-right" size={28} color={colors.text} />
+        </TouchableOpacity>
       </View>
 
       {/* View mode switcher */}
@@ -654,10 +711,74 @@ export default function CalendarScreen() {
         </Animated.View>
       </View>
 
-      {/* FAB */}
-      <TouchableOpacity style={styles.fab} onPress={handleAddEvent} activeOpacity={0.8}>
-        <MaterialCommunityIcons name="plus" size={28} color={colors.textInverse} />
-      </TouchableOpacity>
+      {/* 聚合操作 FAB：点击主按钮向上弹出 添加 / 搜索 / 刷新 */}
+      <Animated.View
+        style={[styles.fabBackdrop, { opacity: fabBackdropOpacity }]}
+        pointerEvents={fabOpen ? 'auto' : 'none'}
+      >
+        <TouchableWithoutFeedback onPress={closeFab}>
+          <View style={StyleSheet.absoluteFill} />
+        </TouchableWithoutFeedback>
+      </Animated.View>
+
+      <View style={styles.fabContainer} pointerEvents="box-none">
+        <View style={styles.fabActions} pointerEvents={fabOpen ? 'auto' : 'none'}>
+          {fabActions.map((action, i) => (
+            <Animated.View
+              key={action.key}
+              style={[
+                styles.fabActionRow,
+                {
+                  opacity: fabItemAnims[i],
+                  transform: [
+                    {
+                      translateY: fabItemAnims[i].interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [18, 0],
+                      }),
+                    },
+                    {
+                      scale: fabItemAnims[i].interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.8, 1],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <View style={styles.fabLabelWrap}>
+                <Text style={styles.fabLabel}>{action.label}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.fabActionBtn}
+                onPress={action.onPress}
+                activeOpacity={0.85}
+                accessibilityLabel={action.label}
+              >
+                {action.key === 'refresh' ? (
+                  <Animated.View style={{ transform: [{ rotate: refreshSpin }] }}>
+                    <MaterialCommunityIcons name="refresh" size={22} color={colors.primary} />
+                  </Animated.View>
+                ) : (
+                  <MaterialCommunityIcons name={action.icon} size={22} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            </Animated.View>
+          ))}
+        </View>
+
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => setFabOpen((o) => !o)}
+          activeOpacity={0.85}
+          accessibilityLabel="更多操作"
+        >
+          <Animated.View style={{ transform: [{ rotate: fabIconRotate }] }}>
+            <MaterialCommunityIcons name="plus" size={28} color={colors.textInverse} />
+          </Animated.View>
+        </TouchableOpacity>
+      </View>
 
       {/* Event Detail Sheet */}
       <EventDetailSheet
@@ -707,10 +828,6 @@ const styles = StyleSheet.create({
   },
   navButton: {
     padding: spacing.xs,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   headerCenter: {
     flexDirection: 'row',
@@ -804,10 +921,67 @@ const styles = StyleSheet.create({
     fontSize: fontSize.lg,
     fontWeight: '600',
   },
-  fab: {
+  // ===== 聚合操作 FAB（添加 / 搜索 / 刷新）=====
+  fabBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(15, 23, 42, 0.12)',
+  },
+  fabContainer: {
     position: 'absolute',
     right: spacing.lg,
     bottom: spacing.xl,
+    alignItems: 'flex-end',
+  },
+  fabActions: {
+    alignItems: 'flex-end',
+    marginBottom: 14,
+    gap: 14,
+  },
+  fabActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    // 让 48 的菜单按钮与 56 的主按钮中心对齐
+    marginRight: 4,
+  },
+  fabLabelWrap: {
+    backgroundColor: colors.bg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radius.round,
+    borderWidth: 1,
+    borderColor: colors.border,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+  },
+  fabLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  fabActionBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  fab: {
     width: 56,
     height: 56,
     borderRadius: 28,
