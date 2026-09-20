@@ -12,11 +12,11 @@
 ### 日历核心
 
 - **月/周/日三视图** — 底部标签切换，支持前后翻页、回到今天
-- **日视图 24 小时时间轴** — 事件按开始时间定位、方块高度对应时长，全天/未设置时间事件置顶，含当前时间红线与自动滚动到首个事件
+- **日视图 24 小时时间轴** — 事件按开始时间定位、方块高度对应时长，全天/未设置时间事件落到 08:30~17:30 区块，含当前时间红线与自动滚动到首个事件
 - **农历 + 二十四节气** — 后端天文计算，移动端展示
 - **法定节假日 & 调休** — 假期与补班自动标注
 - **事件管理** — 创建、编辑、删除、标记完成、颜色标记
-- **事件备注 / 时间范围 / 全天** — 支持多行备注、开始-结束时间，全天事件在日视图置顶
+- **事件备注 / 时间范围 / 全天** — 支持多行备注、开始-结束时间，全天事件在日视图落到工作时间段并始终展示备注
 - **重复事件** — 每天 / 每周 / 每月 / 每年重复，支持「仅此事件 / 整个系列」增删改，重复事件以 🔄 标识
 - **搜索 / 筛选** — 按关键字（标题或备注）、日期范围、颜色、完成状态组合查询，结果可一键跳转或直接勾选完成
 - **事件详情** — 底部抽屉展示详情，支持编辑/删除/标记完成
@@ -76,7 +76,7 @@ calendar-mobile/
     │   ├── DayCell.tsx            # 月视图日期单元格
     │   ├── MonthView.tsx          # 月视图
     │   ├── WeekView.tsx           # 周视图（横向滚动）
-    │   ├── DayView.tsx            # 日视图（24 小时时间轴，全天置顶）
+    │   ├── DayView.tsx            # 日视图（24 小时时间轴，全天落到 08:30~17:30）
     │   ├── EventFormSheet.tsx     # 事件新增/编辑底部表单（备注/时间范围/全天/重复）
     │   ├── EventDetailSheet.tsx   # 事件详情底部抽屉
     │   └── SearchSheet.tsx        # 搜索 / 筛选底部面板
@@ -154,7 +154,7 @@ npx expo start
 |------|------|
 | 月视图 | 点击日期切换日视图，点击事件打开详情，点击「更多」跳转日视图 |
 | 周视图 | 横向滚动查看一周，点击日期头部切换日视图，点击事件打开详情 |
-| 日视图 | 24 小时时间轴展示，事件按开始时间定位、高度对应时长，全天事件置顶，含当前时间线；点击事件打开详情，可添加/编辑/删除 |
+| 日视图 | 24 小时时间轴展示，事件按开始时间定位、高度对应时长，全天事件落到 08:30~17:30 区块且备注始终展示，含当前时间线；点击事件打开详情，可添加/编辑/删除 |
 
 ### 事件管理
 
@@ -207,10 +207,10 @@ npx expo start
 设置页显示的版本号直接读取 `app.json`，因此不会与原生版本漂移。
 
 ```bash
-npm run bump patch                # 1.2.0 -> 1.2.1
-npm run bump minor                # 1.2.0 -> 1.3.0
-npm run bump major                # 1.2.0 -> 2.0.0
-npm run bump 1.2.0                # version 不变，只递增构建号（同版本重发包）
+npm run bump patch                # 1.3.0 -> 1.3.1
+npm run bump minor                # 1.3.0 -> 1.4.0
+npm run bump major                # 1.3.0 -> 2.0.0
+npm run bump 1.3.0                # version 不变，只递增构建号（同版本重发包）
 npm run bump -- --dry-run patch   # 只预览，不写入
 ```
 
@@ -243,45 +243,45 @@ npm run verify:signing
 > `npm run android:release` = `android:sync`（prebuild 重建 `android/` 并写入 `local.properties`）+ `gradlew assembleRelease`。
 > 只有想单独同步原生工程而不打包时，才需要手动执行 `npm run android:sync`。
 
-#### 场景 A：V1.2.0 → V1.2.1（修订版：修 bug、无新功能）
+#### 场景 A：V1.3.0 → V1.3.1（修订版：修 bug、无新功能）
 
 ```bash
 npm run typecheck
-npm run bump -- --dry-run patch    # 预览：version 1.2.0 -> 1.2.1, versionCode -> 4, buildNumber -> 2
+npm run bump -- --dry-run patch    # 预览：version 1.3.0 -> 1.3.1, versionCode -> 5, buildNumber -> 3
 npm run bump patch
-# 编辑 CHANGELOG.md 新增 "## [V1.2.1] - YYYY-MM-DD"
+# 编辑 CHANGELOG.md 新增 "## [V1.3.1] - YYYY-MM-DD"
 npm run android:release            # 或 npm run android:aab
 npm run verify:signing
 ```
 
 | 字段 | 变化 |
 |------|------|
-| `version` | 1.2.0 → **1.2.1** |
-| `versionCode` | 3 → **4** |
-| `buildNumber` | 1 → **2** |
+| `version` | 1.3.0 → **1.3.1** |
+| `versionCode` | 4 → **5** |
+| `buildNumber` | 2 → **3** |
 
-#### 场景 B：V1.2.0 → V1.3.0（次版本：新增功能、向后兼容）
+#### 场景 B：V1.3.0 → V1.4.0（次版本：新增功能、向后兼容）
 
 ```bash
 npm run typecheck
-npm run bump -- --dry-run minor    # 预览：version 1.2.0 -> 1.3.0, versionCode -> 4, buildNumber -> 2
+npm run bump -- --dry-run minor    # 预览：version 1.3.0 -> 1.4.0, versionCode -> 5, buildNumber -> 3
 npm run bump minor
-# 编辑 CHANGELOG.md 新增 "## [V1.3.0] - YYYY-MM-DD"
+# 编辑 CHANGELOG.md 新增 "## [V1.4.0] - YYYY-MM-DD"
 npm run android:release            # 或 npm run android:aab
 npm run verify:signing
 ```
 
 | 字段 | 变化 |
 |------|------|
-| `version` | 1.2.0 → **1.3.0** |
-| `versionCode` | 3 → **4** |
-| `buildNumber` | 1 → **2** |
+| `version` | 1.3.0 → **1.4.0** |
+| `versionCode` | 4 → **5** |
+| `buildNumber` | 2 → **3** |
 
-#### 场景 C：V1.2.0 → V2.0.0（主版本：破坏性变更）
+#### 场景 C：V1.3.0 → V2.0.0（主版本：破坏性变更）
 
 ```bash
 npm run typecheck
-npm run bump -- --dry-run major    # 预览：version 1.2.0 -> 2.0.0, versionCode -> 4, buildNumber -> 2
+npm run bump -- --dry-run major    # 预览：version 1.3.0 -> 2.0.0, versionCode -> 5, buildNumber -> 3
 npm run bump major
 # 编辑 CHANGELOG.md 新增 "## [V2.0.0] - YYYY-MM-DD"（建议写明不兼容点与升级方式）
 npm run android:release            # 或 npm run android:aab
@@ -290,18 +290,18 @@ npm run verify:signing
 
 | 字段 | 变化 |
 |------|------|
-| `version` | 1.2.0 → **2.0.0** |
-| `versionCode` | 3 → **4** |
-| `buildNumber` | 1 → **2** |
+| `version` | 1.3.0 → **2.0.0** |
+| `versionCode` | 4 → **5** |
+| `buildNumber` | 2 → **3** |
 
-> 三种场景的 `versionCode` 都是 3 → 4，**差别只在 `version` 的语义**：修订=修 bug、次版本=加功能、主版本=不兼容改动。
+> 三种场景的 `versionCode` 都是 4 → 5，**差别只在 `version` 的语义**：修订=修 bug、次版本=加功能、主版本=不兼容改动。
 
 #### 场景 D：版本不变，只重新出包
 
 改了签名配置、调整了构建参数，或上一次的包需要重打时：
 
 ```bash
-npm run bump 1.2.0        # version 保持 1.2.0，versionCode 3 -> 4
+npm run bump 1.3.0        # version 保持 1.3.0，versionCode 4 -> 5
 npm run android:release
 npm run verify:signing
 ```
@@ -321,7 +321,7 @@ npm run verify:signing
 # ① 版本：确认 APK 内嵌的版本与 app.json 一致
 AAPT=$(ls -d "$HOME"/Android/Sdk/build-tools/*/aapt2 | sort -V | tail -1)
 "$AAPT" dump badging android/app/build/outputs/apk/release/app-release.apk | grep '^package:'
-# → package: name='com.calendar.app' versionCode='4' versionName='1.2.1' ...
+# → package: name='com.calendar.app' versionCode='5' versionName='1.3.1' ...
 
 # ② 签名：确认真的是正式证书，而不是静默回退到 debug
 npm run verify:signing

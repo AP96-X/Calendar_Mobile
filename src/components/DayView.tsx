@@ -36,9 +36,18 @@ interface DayViewProps {
 
 const HOUR_HEIGHT = 56; // 每小时对应的像素高度
 const MIN_EVENT_HEIGHT = 26; // 事件方块最小高度
+const MIN_EVENT_HEIGHT_WITH_NOTE = 46; // 有备注时的最小高度：容纳标题 + 一行备注
+// 事件方块内部布局参数（用于按方块高度推算备注可显示的行数）
+const EVENT_HEADER_HEIGHT = 16; // 复选 / 时间 / 标题所在行的高度
+const EVENT_BLOCK_VPADDING = 6; // eventBlock 上下 padding 之和
+const DESC_LINE_HEIGHT = 15; // 备注每行高度
+const DESC_MARGIN_TOP = 2; // 备注与标题行的间距
 const MIN_DURATION = 30; // 最短显示时长（分钟）
 const DEFAULT_DURATION = 60; // 未填结束时间时的默认时长（分钟）
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
+// 全天 / 未设置时间的事件在时间轴上占用的时段（08:30 ~ 17:30）
+const ALL_DAY_START = 8 * 60 + 30;
+const ALL_DAY_END = 17 * 60 + 30;
 
 function toMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number);
@@ -78,22 +87,24 @@ function DayViewInner({
   const scrollRef = useRef<ScrollView>(null);
   const [areaWidth, setAreaWidth] = useState(0);
 
-  // 全天 / 未设置时间的事件置顶；其余按时间落到刻度轴上
-  const { allDayEvents, laidOut, laneCount } = useMemo(() => {
-    const allDay = events.filter((e) => e.all_day || !e.time);
-    const timed = events
-      .filter((e) => !e.all_day && !!e.time)
+  // 全天 / 未设置时间的事件统一按 08:30~17:30 落到时间轴上；其余按实际时间定位
+  const { laidOut, laneCount } = useMemo(() => {
+    const items = events
       .map((e) => {
+        const allDay = !!e.all_day || !e.time;
+        if (allDay) {
+          return { ev: e, start: ALL_DAY_START, end: ALL_DAY_END, allDay };
+        }
         const start = toMinutes(e.time as string);
         const rawEnd = e.end_time ? toMinutes(e.end_time) : start + DEFAULT_DURATION;
         const end = Math.max(rawEnd, start + MIN_DURATION);
-        return { ev: e, start, end };
+        return { ev: e, start, end, allDay };
       })
       .sort((a, b) => a.start - b.start || a.end - b.end);
 
     // 正常情况下同一天不会有时间重叠，这里做泳道兜底（数据异常时并排显示而不是叠在一起）
     const laneEnds: number[] = [];
-    const laid = timed.map((it) => {
+    const laid = items.map((it) => {
       let lane = laneEnds.findIndex((end) => end <= it.start);
       if (lane === -1) {
         lane = laneEnds.length;
@@ -104,7 +115,7 @@ function DayViewInner({
       return { ...it, lane };
     });
 
-    return { allDayEvents: allDay, laidOut: laid, laneCount: Math.max(1, laneEnds.length) };
+    return { laidOut: laid, laneCount: Math.max(1, laneEnds.length) };
   }, [events]);
 
   const firstStart = laidOut.length > 0 ? laidOut[0].start : null;
@@ -212,62 +223,6 @@ function DayViewInner({
         </ScrollView>
       ) : (
         <>
-          {/* 全天 / 未设置时间事件 */}
-          {allDayEvents.length > 0 ? (
-            <View style={styles.allDaySection}>
-              <Text style={styles.allDayLabel}>全天</Text>
-              <ScrollView
-                style={styles.allDayScroll}
-                nestedScrollEnabled={true}
-                showsVerticalScrollIndicator={false}
-              >
-                <View style={styles.allDayList}>
-                  {allDayEvents.map((ev) => (
-                    <TouchableOpacity
-                      key={ev.id}
-                      style={[styles.allDayItem, { backgroundColor: ev.color }]}
-                      onPress={() => onEventPress(ev)}
-                      activeOpacity={0.7}
-                    >
-                      <TouchableOpacity
-                        onPress={() => onEventToggle(ev.id)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <MaterialCommunityIcons
-                          name={ev.completed ? 'checkbox-marked' : 'checkbox-blank-outline'}
-                          size={18}
-                          color="rgba(255,255,255,0.95)"
-                        />
-                      </TouchableOpacity>
-                      {ev.recurrence ? (
-                        <MaterialCommunityIcons name="sync" size={12} color="rgba(255,255,255,0.9)" />
-                      ) : null}
-                      <Text
-                        style={[styles.allDayTitle, ev.completed && styles.eventCompleted]}
-                        numberOfLines={1}
-                      >
-                        {ev.title}
-                      </Text>
-                      {ev.time && ev.end_time ? (
-                        <Text style={styles.allDayTime}>{ev.time}-{ev.end_time}</Text>
-                      ) : null}
-                      <TouchableOpacity
-                        onPress={() => handleDelete(ev)}
-                        hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                      >
-                        <MaterialCommunityIcons
-                          name="delete-outline"
-                          size={16}
-                          color="rgba(255,255,255,0.9)"
-                        />
-                      </TouchableOpacity>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
-            </View>
-          ) : null}
-
           {/* 时间刻度轴 */}
           <ScrollView
             ref={scrollRef}
@@ -312,11 +267,22 @@ function DayViewInner({
                 ) : null}
 
                 {/* 事件方块 */}
-                {laidOut.map(({ ev, start, end, lane }) => {
+                {laidOut.map(({ ev, start, end, lane, allDay }) => {
                   const laneWidth = areaWidth > 0 ? areaWidth / laneCount : 0;
                   const top = (start / 60) * HOUR_HEIGHT;
-                  const height = Math.max(((end - start) / 60) * HOUR_HEIGHT, MIN_EVENT_HEIGHT);
-                  const timeLabel = `${hhmm(start)}${ev.end_time ? `-${hhmm(end)}` : ''}`;
+                  const height = Math.max(
+                    ((end - start) / 60) * HOUR_HEIGHT,
+                    ev.description ? MIN_EVENT_HEIGHT_WITH_NOTE : MIN_EVENT_HEIGHT,
+                  );
+                  const timeLabel = `${hhmm(start)}${allDay || ev.end_time ? `-${hhmm(end)}` : ''}`;
+                  // 备注行数随方块高度自适应：方块越高显示越多，超出部分以省略号截断
+                  const descLines = Math.max(
+                    1,
+                    Math.floor(
+                      (height - EVENT_HEADER_HEIGHT - EVENT_BLOCK_VPADDING - DESC_MARGIN_TOP)
+                        / DESC_LINE_HEIGHT,
+                    ),
+                  );
                   return (
                     <View
                       key={ev.id}
@@ -366,8 +332,8 @@ function DayViewInner({
                             />
                           </TouchableOpacity>
                         </View>
-                        {ev.description && height >= 46 ? (
-                          <Text style={styles.eventDesc} numberOfLines={2}>
+                        {ev.description ? (
+                          <Text style={styles.eventDesc} numberOfLines={descLines}>
                             {ev.description}
                           </Text>
                         ) : null}
@@ -442,49 +408,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: '600',
     color: colors.textInverse,
-  },
-  // ===== 全天事件 =====
-  allDaySection: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.bg,
-  },
-  allDayLabel: {
-    fontSize: fontSize.xs,
-    color: colors.textMuted,
-    marginBottom: 4,
-  },
-  allDayScroll: {
-    maxHeight: 120,
-    marginBottom: spacing.sm,
-  },
-  allDayList: {
-    gap: 4,
-  },
-  allDayItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-  },
-  allDayTitle: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: fontSize.md,
-    fontWeight: '500',
-    color: '#FFFFFF',
-  },
-  allDayTime: {
-    fontSize: fontSize.sm,
-    color: 'rgba(255,255,255,0.85)',
-  },
-  eventCompleted: {
-    textDecorationLine: 'line-through',
-    opacity: 0.6,
   },
   // ===== 时间刻度轴 =====
   timeline: {
@@ -577,8 +500,9 @@ const styles = StyleSheet.create({
   },
   eventDesc: {
     fontSize: 11,
+    lineHeight: DESC_LINE_HEIGHT,
     color: 'rgba(255,255,255,0.85)',
-    marginTop: 2,
+    marginTop: DESC_MARGIN_TOP,
   },
   // ===== 空状态 =====
   emptyState: {
