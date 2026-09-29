@@ -12,7 +12,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import type { CalendarEvent, EventUpdateScope } from '../types';
 import { formatEventTime, getRecurrenceLabel } from '../utils/calendar';
-import { colors } from '../theme/colors';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import type { Palette } from '../theme/palette';
 import { spacing, fontSize, radius } from '../theme/spacing';
 
 interface EventDetailSheetProps {
@@ -34,6 +35,9 @@ export default function EventDetailSheet({
   onDelete,
   onToggleComplete,
 }: EventDetailSheetProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   if (!event) return null;
 
   const eventDate = dayjs(event.date);
@@ -217,7 +221,7 @@ export default function EventDetailSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Palette) => StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -272,10 +276,10 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   statusDone: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: colors.successSoft,
   },
   statusPending: {
-    backgroundColor: '#EBF5FF',
+    backgroundColor: colors.highlight,
   },
   statusText: {
     fontSize: fontSize.sm,

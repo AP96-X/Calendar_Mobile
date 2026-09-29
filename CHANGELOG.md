@@ -2,6 +2,34 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范，版本号以 Git Tag 形式发布（`V主版本.次版本.修订号`）。
 
+## [V1.4.0] - 2026-09-29
+
+全站深色模式：新增「浅色 / 深色 / 跟随系统」三态主题，自定义组件与 react-native-paper 组件同步切换。
+
+### 新增
+
+- **深色模式** — 支持浅色 / 深色 / 跟随系统三种模式：
+  - 设置页新增「外观」三选一（浅色 / 深色 / 跟随系统）
+  - 选择保存在 `AsyncStorage`（键名 `calendar-theme`，与 Web 端同名），冷启动自动恢复
+  - 「跟随系统」实时响应操作系统的深浅色切换
+- **双调色板主题体系** — 新增 `theme/palette.ts`（`lightColors` / `darkColors`，语义 token 覆盖背景 / 面板 / 边框 / 文本 / 主色 / 状态色 / 日历徽章），深色取值对齐 Web 端 V1.4.0 的 `--cal-*` 变量
+
+### 改进
+
+- 全部 16 个组件 / 页面由「模块级静态样式」改为 `useThemedStyles(createStyles)` 工厂，切换主题即时生效，无需重启
+- react-native-paper 接入 `MD3LightTheme` / `MD3DarkTheme`，TextInput / Button / Checkbox / SegmentedButtons 等自动跟随
+- 导航容器、状态栏同步跟随主题
+- 原先散落在 9 个文件里的语义硬编码色（徽章 pastel、选中高亮、危险浅底、离线提示条等）统一收敛为调色板 token；月 / 周 / 日三处重复的徽章配色合并为 `getBadgePalette()`
+- `app.json` 的 `userInterfaceStyle` 由 `light` 改为 `automatic`，新增 `expo-system-ui` 依赖
+
+### 说明
+
+- 主题偏好仅保存在本地设备，不涉及服务端，跨设备不共享
+- 事件颜色属于用户数据，不参与主题化；事件色块上的前景恒为白色
+- 原生弹窗（`Alert`）与系统键盘跟随系统设置，不受应用内「浅色 / 深色」手动选择影响
+- `userInterfaceStyle` 属于原生配置，需重新 `expo prebuild` 出包，不能只更新 JS
+- 无数据库与后端接口变更
+
 ## [V1.3.0] - 2026-09-20
 
 日视图与后端 V1.3.0 对齐：全天 / 未设置时间的事件落到工作时间段，备注始终展示。

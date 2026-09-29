@@ -13,10 +13,13 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../stores/auth';
 import { getApiBaseUrl, setApiBaseUrl, normalizeUrl, testConnection } from '../api/config';
-import { colors } from '../theme/colors';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import type { Palette } from '../theme/palette';
 import { spacing, fontSize, radius } from '../theme/spacing';
 
 export default function LoginScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { login } = useAuthStore();
 
   // Server config state
@@ -283,7 +286,7 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Palette) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.bgSecondary,
@@ -376,7 +379,7 @@ const styles = StyleSheet.create({
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerSoft,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.md,

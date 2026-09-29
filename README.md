@@ -28,6 +28,7 @@
 - **动态服务器配置** — 登录页/设置页可配置后端 API 地址，支持连接测试
 - **个人信息** — 修改显示名称、修改密码
 - **多用户隔离** — 每个用户独立管理自己的事件
+- **深色模式** — 浅色 / 深色 / 跟随系统三态主题，设置页可切换，偏好保存在本地；深色配色对齐 Web 端
 
 ## 技术栈
 
@@ -37,11 +38,12 @@
 | 语言 | TypeScript 6.0 |
 | 导航 | React Navigation 7（Stack + Bottom Tab） |
 | 状态管理 | Zustand 5 |
-| UI 组件库 | React Native Paper 5（Material Design 3） |
+| UI 组件库 | React Native Paper 5（Material Design 3，深浅双主题） |
+| 主题 | 自建双调色板 + ThemeProvider（浅色 / 深色 / 跟随系统）+ expo-system-ui |
 | 网络请求 | Axios |
 | 日期处理 | Day.js |
 | 安全存储 | Expo Secure Store（Session Cookie） |
-| 本地存储 | AsyncStorage（API 地址等配置） |
+| 本地存储 | AsyncStorage（API 地址、主题偏好等配置） |
 | 文件操作 | Expo Document Picker（导入）+ Expo Sharing（导出分享）+ expo-file-system/legacy（文件写入） |
 
 ## 项目结构
@@ -94,7 +96,8 @@ calendar-mobile/
     │   └── auth.ts                # Zustand 认证状态（登录/登出/刷新）
     │
     ├── theme/                     # 主题配置
-    │   ├── colors.ts              # 颜色定义
+    │   ├── palette.ts             # 深浅两套调色板（含语义 token）
+    │   ├── ThemeProvider.tsx      # 三态主题 Provider（useTheme / useThemedStyles）
     │   └── spacing.ts             # 间距/字号/圆角
     │
     ├── types/
@@ -207,10 +210,10 @@ npx expo start
 设置页显示的版本号直接读取 `app.json`，因此不会与原生版本漂移。
 
 ```bash
-npm run bump patch                # 1.3.0 -> 1.3.1
-npm run bump minor                # 1.3.0 -> 1.4.0
-npm run bump major                # 1.3.0 -> 2.0.0
-npm run bump 1.3.0                # version 不变，只递增构建号（同版本重发包）
+npm run bump patch                # 1.4.0 -> 1.4.1
+npm run bump minor                # 1.4.0 -> 1.5.0
+npm run bump major                # 1.4.0 -> 2.0.0
+npm run bump 1.4.0                # version 不变，只递增构建号（同版本重发包）
 npm run bump -- --dry-run patch   # 只预览，不写入
 ```
 
@@ -243,45 +246,45 @@ npm run verify:signing
 > `npm run android:release` = `android:sync`（prebuild 重建 `android/` 并写入 `local.properties`）+ `gradlew assembleRelease`。
 > 只有想单独同步原生工程而不打包时，才需要手动执行 `npm run android:sync`。
 
-#### 场景 A：V1.3.0 → V1.3.1（修订版：修 bug、无新功能）
+#### 场景 A：V1.4.0 → V1.4.1（修订版：修 bug、无新功能）
 
 ```bash
 npm run typecheck
-npm run bump -- --dry-run patch    # 预览：version 1.3.0 -> 1.3.1, versionCode -> 5, buildNumber -> 3
+npm run bump -- --dry-run patch    # 预览：version 1.4.0 -> 1.4.1, versionCode -> 6, buildNumber -> 4
 npm run bump patch
-# 编辑 CHANGELOG.md 新增 "## [V1.3.1] - YYYY-MM-DD"
+# 编辑 CHANGELOG.md 新增 "## [V1.4.1] - YYYY-MM-DD"
 npm run android:release            # 或 npm run android:aab
 npm run verify:signing
 ```
 
 | 字段 | 变化 |
 |------|------|
-| `version` | 1.3.0 → **1.3.1** |
-| `versionCode` | 4 → **5** |
-| `buildNumber` | 2 → **3** |
+| `version` | 1.4.0 → **1.4.1** |
+| `versionCode` | 5 → **6** |
+| `buildNumber` | 3 → **4** |
 
-#### 场景 B：V1.3.0 → V1.4.0（次版本：新增功能、向后兼容）
+#### 场景 B：V1.4.0 → V1.5.0（次版本：新增功能、向后兼容）
 
 ```bash
 npm run typecheck
-npm run bump -- --dry-run minor    # 预览：version 1.3.0 -> 1.4.0, versionCode -> 5, buildNumber -> 3
+npm run bump -- --dry-run minor    # 预览：version 1.4.0 -> 1.5.0, versionCode -> 6, buildNumber -> 4
 npm run bump minor
-# 编辑 CHANGELOG.md 新增 "## [V1.4.0] - YYYY-MM-DD"
+# 编辑 CHANGELOG.md 新增 "## [V1.5.0] - YYYY-MM-DD"
 npm run android:release            # 或 npm run android:aab
 npm run verify:signing
 ```
 
 | 字段 | 变化 |
 |------|------|
-| `version` | 1.3.0 → **1.4.0** |
-| `versionCode` | 4 → **5** |
-| `buildNumber` | 2 → **3** |
+| `version` | 1.4.0 → **1.5.0** |
+| `versionCode` | 5 → **6** |
+| `buildNumber` | 3 → **4** |
 
-#### 场景 C：V1.3.0 → V2.0.0（主版本：破坏性变更）
+#### 场景 C：V1.4.0 → V2.0.0（主版本：破坏性变更）
 
 ```bash
 npm run typecheck
-npm run bump -- --dry-run major    # 预览：version 1.3.0 -> 2.0.0, versionCode -> 5, buildNumber -> 3
+npm run bump -- --dry-run major    # 预览：version 1.4.0 -> 2.0.0, versionCode -> 6, buildNumber -> 4
 npm run bump major
 # 编辑 CHANGELOG.md 新增 "## [V2.0.0] - YYYY-MM-DD"（建议写明不兼容点与升级方式）
 npm run android:release            # 或 npm run android:aab
@@ -290,18 +293,18 @@ npm run verify:signing
 
 | 字段 | 变化 |
 |------|------|
-| `version` | 1.3.0 → **2.0.0** |
-| `versionCode` | 4 → **5** |
-| `buildNumber` | 2 → **3** |
+| `version` | 1.4.0 → **2.0.0** |
+| `versionCode` | 5 → **6** |
+| `buildNumber` | 3 → **4** |
 
-> 三种场景的 `versionCode` 都是 4 → 5，**差别只在 `version` 的语义**：修订=修 bug、次版本=加功能、主版本=不兼容改动。
+> 三种场景的 `versionCode` 都是 5 → 6，**差别只在 `version` 的语义**：修订=修 bug、次版本=加功能、主版本=不兼容改动。
 
 #### 场景 D：版本不变，只重新出包
 
 改了签名配置、调整了构建参数，或上一次的包需要重打时：
 
 ```bash
-npm run bump 1.3.0        # version 保持 1.3.0，versionCode 4 -> 5
+npm run bump 1.4.0        # version 保持 1.4.0，versionCode 5 -> 6
 npm run android:release
 npm run verify:signing
 ```
@@ -321,7 +324,7 @@ npm run verify:signing
 # ① 版本：确认 APK 内嵌的版本与 app.json 一致
 AAPT=$(ls -d "$HOME"/Android/Sdk/build-tools/*/aapt2 | sort -V | tail -1)
 "$AAPT" dump badging android/app/build/outputs/apk/release/app-release.apk | grep '^package:'
-# → package: name='com.calendar.app' versionCode='5' versionName='1.3.1' ...
+# → package: name='com.calendar.app' versionCode='6' versionName='1.4.1' ...
 
 # ② 签名：确认真的是正式证书，而不是静默回退到 debug
 npm run verify:signing

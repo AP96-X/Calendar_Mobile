@@ -10,7 +10,8 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import { getMonthGridDates } from '../utils/calendar';
-import { colors } from '../theme/colors';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import type { Palette } from '../theme/palette';
 import { spacing, fontSize, radius } from '../theme/spacing';
 
 interface DatePickerModalProps {
@@ -36,6 +37,8 @@ export default function DatePickerModal({
   onClose,
   allowClear = false,
 }: DatePickerModalProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const baseDate = DATE_RE.test(value) ? dayjs(value) : dayjs();
   const [cursor, setCursor] = useState(baseDate.startOf('month'));
   const [selected, setSelected] = useState(DATE_RE.test(value) ? value : '');
@@ -176,7 +179,7 @@ export default function DatePickerModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Palette) => StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'center',

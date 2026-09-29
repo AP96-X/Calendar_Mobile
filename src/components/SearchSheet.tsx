@@ -16,7 +16,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { eventsApi } from '../api/events';
 import { EVENT_COLORS, formatEventTime } from '../utils/calendar';
 import type { CalendarEvent } from '../types';
-import { colors } from '../theme/colors';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import type { Palette } from '../theme/palette';
 import { spacing, fontSize, radius } from '../theme/spacing';
 import DatePickerModal from './DatePickerModal';
 
@@ -44,6 +45,8 @@ const PAGE_SIZE = 200;
 const MAX_LIMIT = 1000;
 
 export default function SearchSheet({ visible, onClose, onJump, onToggle }: SearchSheetProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
   const [color, setColor] = useState('');
@@ -358,7 +361,7 @@ export default function SearchSheet({ visible, onClose, onJump, onToggle }: Sear
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Palette) => StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -516,7 +519,7 @@ const styles = StyleSheet.create({
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerSoft,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.md,

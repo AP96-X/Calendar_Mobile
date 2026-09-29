@@ -6,7 +6,8 @@ import {
   getMonthGridDates,
   getISOWeekNumber,
 } from '../utils/calendar';
-import { colors } from '../theme/colors';
+import { useThemedStyles } from '../theme/ThemeProvider';
+import type { Palette } from '../theme/palette';
 import { fontSize, spacing } from '../theme/spacing';
 import DayCell from './DayCell';
 
@@ -39,6 +40,7 @@ function MonthViewInner({
   refreshing,
   onRefresh,
 }: MonthViewProps) {
+  const styles = useThemedStyles(createStyles);
   const gridDates = useMemo(() => getMonthGridDates(year, month), [year, month]);
 
   // Calculate week numbers for each of the 6 rows
@@ -91,7 +93,7 @@ function MonthViewInner({
       );
     }
     return result;
-  }, [gridDates, weekNumbers, eventsData, calendarMeta, onDayPress, onDayNumberPress, onEventPress, onMorePress, onWeekNumPress]);
+  }, [gridDates, weekNumbers, eventsData, calendarMeta, onDayPress, onDayNumberPress, onEventPress, onMorePress, onWeekNumPress, styles]);
 
   return (
     <View style={styles.container}>
@@ -134,7 +136,7 @@ function MonthViewInner({
 export const MonthView = memo(MonthViewInner);
 export default MonthView;
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Palette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bg,

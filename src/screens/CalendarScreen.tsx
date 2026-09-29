@@ -27,7 +27,8 @@ import { eventsApi } from '../api/events';
 import { calendarApi } from '../api/calendar';
 import { getTodayStr, getMonthLabel, getWeekLabel, getDayLabel, getWeekDates, getISOWeekNumber } from '../utils/calendar';
 import type { EventsByDate, CalendarMeta, CalendarEvent, EventUpdateScope } from '../types';
-import { colors } from '../theme/colors';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import type { Palette } from '../theme/palette';
 import { spacing, fontSize, radius } from '../theme/spacing';
 
 type ViewMode = 'month' | 'week' | 'day';
@@ -43,6 +44,8 @@ interface PageParam {
 const EMPTY_EVENTS: CalendarEvent[] = [];
 
 export default function CalendarScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [todayStr, setTodayStr] = useState(getTodayStr());
   const now = useMemo(() => dayjs(todayStr), [todayStr]);
   const [viewMode, setViewMode] = useState<ViewMode>('month');
@@ -939,7 +942,7 @@ export default function CalendarScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Palette) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -1011,12 +1014,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: spacing.xs,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.warningSoft,
     gap: spacing.xs,
   },
   cacheText: {
     fontSize: fontSize.sm,
-    color: '#D97706',
+    color: colors.warningText,
     fontWeight: '500',
   },
   contentContainer: {
@@ -1039,7 +1042,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderRadius: radius.lg,
     elevation: 8,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
@@ -1084,7 +1087,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.12,
     shadowRadius: 3,
@@ -1104,7 +1107,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 3,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,

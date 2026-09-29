@@ -23,7 +23,8 @@ import {
   isValidTime,
 } from '../utils/calendar';
 import type { CalendarEvent, EventInput, EventUpdateScope, RecurrenceRule } from '../types';
-import { colors } from '../theme/colors';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import type { Palette } from '../theme/palette';
 import { spacing, fontSize, radius } from '../theme/spacing';
 import DatePickerModal from './DatePickerModal';
 import TimePickerModal from './TimePickerModal';
@@ -52,6 +53,8 @@ export default function EventFormSheet({
   onClose,
   onSaved,
 }: EventFormSheetProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(defaultDate);
   const [allDay, setAllDay] = useState(false);
@@ -670,7 +673,7 @@ export default function EventFormSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Palette) => StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -839,7 +842,7 @@ const styles = StyleSheet.create({
   infoBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#EBF5FF',
+    backgroundColor: colors.highlight,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
@@ -900,7 +903,7 @@ const styles = StyleSheet.create({
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerSoft,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
@@ -932,7 +935,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   deleteBtn: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerSoft,
   },
   actionBtnText: {
     fontSize: fontSize.md,

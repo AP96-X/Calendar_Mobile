@@ -16,10 +16,11 @@ import {
   getDayLabel,
   getLunarDisplay,
   getDayBadges,
+  getBadgePalette,
   isToday,
-  type DayBadge,
 } from '../utils/calendar';
-import { colors } from '../theme/colors';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import type { Palette } from '../theme/palette';
 import { spacing, fontSize, radius } from '../theme/spacing';
 
 interface DayViewProps {
@@ -60,16 +61,6 @@ function hhmm(min: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-function getBadgeStyle(type: DayBadge['type']): { bg: string; color: string } {
-  switch (type) {
-    case 'work': return { bg: '#FEF3C7', color: '#D97706' };
-    case 'rest': return { bg: '#D1FAE5', color: '#059669' };
-    case 'term': return { bg: '#F3E8FF', color: '#7C3AED' };
-    case 'festival': return { bg: '#FFEDD5', color: '#EA580C' };
-    default: return { bg: colors.border, color: colors.textSecondary };
-  }
-}
-
 function DayViewInner({
   selectedDate,
   events,
@@ -81,6 +72,8 @@ function DayViewInner({
   refreshing,
   onRefresh,
 }: DayViewProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const lunarInfo = useMemo(() => getLunarDisplay(meta), [meta]);
   const badges = useMemo(() => getDayBadges(meta), [meta]);
 
@@ -183,7 +176,7 @@ function DayViewInner({
               <Text style={styles.lunarText}>{lunarInfo.text}</Text>
             ) : null}
             {badges.map((b, i) => {
-              const style = getBadgeStyle(b.type);
+              const style = getBadgePalette(b.type, colors);
               return (
                 <View key={i} style={[styles.badge, { backgroundColor: style.bg }]}>
                   <Text style={[styles.badgeText, { color: style.color }]}>{b.text}</Text>
@@ -350,7 +343,7 @@ function DayViewInner({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Palette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bg,

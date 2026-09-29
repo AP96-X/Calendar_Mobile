@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import type { RecurrenceRule } from '../types';
+import type { Palette } from '../theme/palette';
 
 // Event color palette (matches original app)
 export const EVENT_COLORS = [
@@ -185,6 +186,20 @@ export interface DayBadge {
   text: string;
   type: 'work' | 'rest' | 'term' | 'festival';
   title?: string;
+}
+
+/** 日历徽章配色：集中一处，避免月 / 周 / 日三处各维护一份硬编码浅色 */
+export function getBadgePalette(
+  type: DayBadge['type'],
+  colors: Palette,
+): { bg: string; color: string } {
+  switch (type) {
+    case 'work': return { bg: colors.badgeWorkBg, color: colors.badgeWorkText };
+    case 'rest': return { bg: colors.badgeRestBg, color: colors.badgeRestText };
+    case 'term': return { bg: colors.badgeTermBg, color: colors.badgeTermText };
+    case 'festival': return { bg: colors.badgeFestivalBg, color: colors.badgeFestivalText };
+    default: return { bg: colors.border, color: colors.textSecondary };
+  }
 }
 
 // Get badge info for a day

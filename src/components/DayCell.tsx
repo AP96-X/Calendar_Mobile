@@ -2,8 +2,9 @@ import React, { memo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { CalendarEvent, DayMeta } from '../types';
-import { isToday, getLunarDisplay, getDayBadges, type DayBadge } from '../utils/calendar';
-import { colors } from '../theme/colors';
+import { isToday, getLunarDisplay, getDayBadges, getBadgePalette } from '../utils/calendar';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import type { Palette } from '../theme/palette';
 import { spacing, fontSize, radius } from '../theme/spacing';
 
 interface DayCellProps {
@@ -20,21 +21,6 @@ interface DayCellProps {
 
 const MAX_EVENTS_SHOW = 2;
 
-function getBadgeStyle(type: DayBadge['type']): { bg: string; color: string } {
-  switch (type) {
-    case 'work':
-      return { bg: '#FEF3C7', color: '#D97706' };
-    case 'rest':
-      return { bg: '#D1FAE5', color: '#059669' };
-    case 'term':
-      return { bg: '#F3E8FF', color: '#7C3AED' };
-    case 'festival':
-      return { bg: '#FFEDD5', color: '#EA580C' };
-    default:
-      return { bg: colors.border, color: colors.textSecondary };
-  }
-}
-
 function DayCellInner({
   date,
   dayNumber,
@@ -46,6 +32,8 @@ function DayCellInner({
   onEventPress,
   onMorePress,
 }: DayCellProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const today = isToday(date);
   const lunarInfo = getLunarDisplay(meta);
   const badges = getDayBadges(meta);
@@ -85,7 +73,7 @@ function DayCellInner({
         {badges.length > 0 && (
           <View style={styles.badgeRow}>
             {badges.slice(0, 2).map((badge, i) => {
-              const style = getBadgeStyle(badge.type);
+              const style = getBadgePalette(badge.type, colors);
               return (
                 <View key={i} style={[styles.badge, { backgroundColor: style.bg }]}>
                   <Text style={[styles.badgeText, { color: style.color }]} numberOfLines={1}>
@@ -148,7 +136,7 @@ function DayCellInner({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Palette) => StyleSheet.create({
   container: {
     flex: 1,
     padding: 3,
@@ -160,7 +148,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgSecondary,
   },
   todayCell: {
-    backgroundColor: '#EBF5FF',
+    backgroundColor: colors.highlight,
   },
   topRow: {
     flexDirection: 'row',

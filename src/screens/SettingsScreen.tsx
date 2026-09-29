@@ -9,7 +9,7 @@ import {
   Modal,
   Linking,
 } from 'react-native';
-import { TextInput, Button, Divider, ActivityIndicator } from 'react-native-paper';
+import { TextInput, Button, Divider, ActivityIndicator, SegmentedButtons } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { cacheDirectory, writeAsStringAsync } from 'expo-file-system/legacy';
@@ -22,7 +22,8 @@ import { eventsApi } from '../api/events';
 import { getCookie } from '../api/client';
 import { siteApi } from '../api/site';
 import { passwordStrengthError } from '../utils/password';
-import { colors } from '../theme/colors';
+import { useTheme, useThemedStyles, type ThemeMode } from '../theme/ThemeProvider';
+import type { Palette } from '../theme/palette';
 import { spacing, fontSize, radius } from '../theme/spacing';
 import dayjs from 'dayjs';
 // 版本号唯一真相源：直接读 app.json，避免与原生 versionName 各写一份后漂移。
@@ -33,6 +34,8 @@ const APP_VERSION = appJson.expo.version;
 
 export default function SettingsScreen() {
   const { user, logout, refresh } = useAuthStore();
+  const { colors, mode: themeMode, setMode: setThemeMode } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [apiUrl, setApiUrl] = useState('');
   const [editingUrl, setEditingUrl] = useState(false);
   const [urlInput, setUrlInput] = useState('');
@@ -367,6 +370,22 @@ export default function SettingsScreen() {
 
         <Divider />
 
+        {/* Appearance / Theme */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>外观</Text>
+          <SegmentedButtons
+            value={themeMode}
+            onValueChange={(value) => setThemeMode(value as ThemeMode)}
+            buttons={[
+              { value: 'light', label: '浅色', icon: 'white-balance-sunny' },
+              { value: 'dark', label: '深色', icon: 'moon-waning-crescent' },
+              { value: 'system', label: '跟随系统', icon: 'cellphone-cog' },
+            ]}
+          />
+        </View>
+
+        <Divider />
+
         {/* Password Change */}
         <View style={styles.section}>
           <TouchableOpacity
@@ -591,7 +610,7 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Palette) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.bgSecondary,
@@ -669,10 +688,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   roleAdmin: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.roleAdminBg,
   },
   roleUser: {
-    backgroundColor: '#EBF5FF',
+    backgroundColor: colors.highlight,
   },
   roleText: {
     fontSize: fontSize.xs,
@@ -722,7 +741,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerSoft,
     gap: spacing.sm,
   },
   logoutText: {

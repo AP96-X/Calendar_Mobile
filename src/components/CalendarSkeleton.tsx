@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated } from 'react-native';
-import { colors } from '../theme/colors';
+import { useThemedStyles } from '../theme/ThemeProvider';
+import type { Palette } from '../theme/palette';
 import { spacing, radius } from '../theme/spacing';
 
 interface CalendarSkeletonProps {
@@ -9,6 +10,7 @@ interface CalendarSkeletonProps {
 
 /** 首次加载时的骨架屏：用脉冲灰块占位，避免白屏 */
 export default function CalendarSkeleton({ mode }: CalendarSkeletonProps) {
+  const styles = useThemedStyles(createStyles);
   const pulse = useRef(new Animated.Value(0.45)).current;
 
   useEffect(() => {
@@ -75,7 +77,7 @@ export default function CalendarSkeleton({ mode }: CalendarSkeletonProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Palette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bg,

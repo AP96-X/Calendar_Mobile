@@ -9,7 +9,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import type { Palette } from '../theme/palette';
 import { spacing, fontSize, radius } from '../theme/spacing';
 
 interface TimePickerModalProps {
@@ -41,6 +42,8 @@ export default function TimePickerModal({
   onClose,
   allowClear = false,
 }: TimePickerModalProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [hour, setHour] = useState(9);
   const [minute, setMinute] = useState(0);
   const hourRef = useRef<ScrollView>(null);
@@ -161,7 +164,7 @@ export default function TimePickerModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Palette) => StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'center',

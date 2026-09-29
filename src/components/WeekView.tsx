@@ -2,8 +2,9 @@ import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { EventsByDate, CalendarMeta, CalendarEvent } from '../types';
-import { getWeekDates, isToday, getLunarDisplay, getDayBadges, type DayBadge } from '../utils/calendar';
-import { colors } from '../theme/colors';
+import { getWeekDates, isToday, getLunarDisplay, getDayBadges, getBadgePalette } from '../utils/calendar';
+import { useTheme, useThemedStyles } from '../theme/ThemeProvider';
+import type { Palette } from '../theme/palette';
 import { spacing, fontSize, radius } from '../theme/spacing';
 
 interface WeekViewProps {
@@ -19,16 +20,6 @@ interface WeekViewProps {
 
 const WEEKDAY_NAMES = ['一', '二', '三', '四', '五', '六', '日'];
 
-function getBadgeStyle(type: DayBadge['type']): { bg: string; color: string } {
-  switch (type) {
-    case 'work': return { bg: '#FEF3C7', color: '#D97706' };
-    case 'rest': return { bg: '#D1FAE5', color: '#059669' };
-    case 'term': return { bg: '#F3E8FF', color: '#7C3AED' };
-    case 'festival': return { bg: '#FFEDD5', color: '#EA580C' };
-    default: return { bg: colors.border, color: colors.textSecondary };
-  }
-}
-
 function WeekViewInner({
   selectedDate,
   eventsData,
@@ -39,6 +30,8 @@ function WeekViewInner({
   refreshing,
   onRefresh,
 }: WeekViewProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate]);
 
   return (
@@ -73,7 +66,7 @@ function WeekViewInner({
               {badges.length > 0 ? (
                 <View style={styles.badgeRow}>
                   {badges.slice(0, 2).map((b, bi) => {
-                    const style = getBadgeStyle(b.type);
+                    const style = getBadgePalette(b.type, colors);
                     return (
                       <View key={bi} style={[styles.badge, { backgroundColor: style.bg }]}>
                         <Text style={[styles.badgeText, { color: style.color }]} numberOfLines={1}>
@@ -151,7 +144,7 @@ function WeekViewInner({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Palette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -170,7 +163,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   headerCellToday: {
-    backgroundColor: '#EBF5FF',
+    backgroundColor: colors.highlight,
   },
   headerCellSelected: {
     borderBottomWidth: 2,
@@ -242,7 +235,7 @@ const styles = StyleSheet.create({
     padding: 1,
   },
   dayColumnToday: {
-    backgroundColor: 'rgba(74, 144, 217, 0.04)',
+    backgroundColor: colors.primaryFaint,
   },
   dayColumnTouchable: {
     flexGrow: 1,
